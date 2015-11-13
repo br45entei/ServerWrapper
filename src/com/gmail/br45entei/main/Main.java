@@ -4,18 +4,18 @@ import com.gmail.br45entei.data.Credentials;
 import com.gmail.br45entei.data.DisposableByteArrayOutputStream;
 import com.gmail.br45entei.data.Property;
 import com.gmail.br45entei.data.RemoteClient;
+import com.gmail.br45entei.process.ProcessIO;
 import com.gmail.br45entei.swt.Functions;
 import com.gmail.br45entei.util.IOUtils;
 import com.gmail.br45entei.util.JavaProgramArguments;
 import com.gmail.br45entei.util.StringUtil;
 
+import java.awt.Desktop;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.lang.ProcessBuilder.Redirect;
@@ -50,24 +50,20 @@ import org.eclipse.swt.widgets.Text;
 import org.eclipse.wb.swt.SWTResourceManager;
 
 /** @author Brian_Entei */
-public class Main {
+public final class Main {
 	
-	protected static volatile Thread						swtThread;
-	public static final File								rootDir					= new File(System.getProperty("user.dir"));
+	protected static Thread									swtThread;
 	
 	public static volatile String							javaHome;
 	public static volatile String							javaExecutable;
-	public static volatile File								serverJar				= null;													//new File(rootDir, "minecraft_server.jar");
-																																				
+	public static volatile File								serverJar				= null;
+	
 	protected static volatile boolean						isRunning				= false;
 	
-	protected static Display								display;
-	protected static Shell									shell;
-	protected static StyledText								output;
-	protected static StyledText								error;
-	protected static Text									inputField;
-	
-	protected static MenuItem								mntmSelectJavaExecutable;
+	/** The working directory of this application as determined by<br>
+	 * <code>System.getProperty("user.dir")</code> */
+	public static final File								rootDir					= new File(System.getProperty("user.dir"));
+	protected static final File								settingsFile			= new File(rootDir, "settings.txt");
 	
 	//Console font settings ================
 	
@@ -78,7 +74,12 @@ public class Main {
 	protected static volatile boolean						consoleFontUnderLined	= false;
 	protected static volatile boolean						consoleFontItalicized	= true;
 	
-	protected static final File								settingsFile			= new File(rootDir, "settings.txt");
+	//General wrapper settings =============
+	
+	protected static volatile boolean						automaticServerStartup	= true;
+	/** Whether or not server information such as icons and server names/motds
+	 * are sent to clients */
+	public static volatile boolean							sendServerInfoToClients	= true;
 	
 	//=============
 	
@@ -88,7 +89,6 @@ public class Main {
 	protected static final Property<Integer>				selectedCommand			= new Property<>("Selected Command", Integer.valueOf(0));
 	protected static final DisposableByteArrayOutputStream	out						= new DisposableByteArrayOutputStream();
 	protected static final Property<String>					outTxt					= new Property<>("Console Text", "");
-	protected static volatile int							numOfLinesInOutTxt		= 0;
 	protected static final Thread							outTxtUpdateThread		= new Thread(new Runnable() {
 																						@Override
 																						public final void run() {
@@ -106,7 +106,6 @@ public class Main {
 																										Functions.sleep(10L);
 																										final int maxLines = 10000;
 																										final int numOfLines = StringUtil.getNumOfLinesInStr(t);
-																										numOfLinesInOutTxt = numOfLines;
 																										Functions.sleep(10L);
 																										if(numOfLines > maxLines) {
 																											final int numOfLinesToSkip = numOfLines - maxLines;
@@ -121,7 +120,7 @@ public class Main {
 																												Functions.sleep(10L);
 																											}
 																										}
-																										text = t + ">";
+																										text = t;// + ">";
 																										outTxt.setValue(text);
 																									} catch(Throwable e) {
 																										e.printStackTrace();
@@ -143,7 +142,7 @@ public class Main {
 																									try {
 																										final String text;
 																										String t = err.toString();
-																										Functions.sleep(15L);
+																										//Functions.sleep(15L);
 																										//String random = ((Object) "".toCharArray()).toString();
 																										//t = t.replace("\r>", "").replace("\r\n", random).replace("\r", "\n").replace("\n\n", "\n").replace(random, "\r\n").replace("\n\n", "\n");
 																										
@@ -179,21 +178,38 @@ public class Main {
 		return outTxt.getValue();
 	}
 	
-	public static final int getNumberOfConsoleLogs() {
-		return numOfLinesInOutTxt;//StringUtil.getNumOfLinesInStr(outTxt.getValue());
+	public static final String getConsoleErrors() {
+		return errTxt.getValue();
 	}
 	
 	static {
+		if(!rootDir.exists()) {
+			rootDir.mkdirs();
+		}
 		outTxtUpdateThread.setDaemon(true);
 		errTxtUpdateThread.setDaemon(true);
 	}
 	
 	protected static volatile ProcessIO	process;
-	protected static volatile int		processExitCode	= 0;
-	protected static volatile boolean	hasProcessDied	= false;
-	protected static volatile boolean	startServer		= false;
-	private static volatile String		serverState;
+	protected static volatile int		processExitCode			= 0;
+	protected static volatile boolean	hasProcessDied			= false;
+	protected static volatile boolean	startServer				= false;
+	protected static volatile boolean	updateShellAppearance	= false;
 	
+	private static volatile String		serverState;
+	protected static volatile boolean	aboutDialogIsOpen		= false;
+	
+	protected static Display			display;
+	protected static Shell				shell;
+	protected static StyledText			output;
+	protected static StyledText			error;
+	protected static Text				inputField;
+	
+	protected static MenuItem			mntmExittaltf;
+	protected static MenuItem			mntmSelectJavaExecutable;
+	protected static MenuItem			mntmStartServerAutomatically;
+	protected static MenuItem			mntmSendServerInfo;
+	protected static MenuItem			mntmOpenServerFolder;
 	protected static Button				btnSendInput;
 	protected static Text				txtServerjar;
 	protected static Text				txtVmArgs;
@@ -211,9 +227,18 @@ public class Main {
 	protected static Label				lblPortWas;
 	protected static Button				btnDisableRemoteAdmin;
 	protected static Button				btnEnableRemoteAdmin;
+	private static MenuItem				mntmabout;
 	
 	public static final boolean isRunning() {
 		return isRunning;
+	}
+	
+	public static final String getDefaultShellTitle() {
+		return "Server Wrapper - Version " + RemoteAdmin.PROTOCOL_VERSION;
+	}
+	
+	private static final Image[] getDefaultImages() {
+		return new Image[] {SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-16x16.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-32x32.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-64x64.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-128x128.png")};
 	}
 	
 	/** Launch the application.
@@ -236,13 +261,14 @@ public class Main {
 		});
 		shell.setSize(904, 592);
 		shell.setMinimumSize(904, 592);
-		shell.setText("Minecraft Server Wrapper - Made by Brian_Entei");
-		shell.setImages(new Image[] {SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-16x16.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-32x32.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-64x64.png"), SWTResourceManager.getImage(Functions.class, "/assets/textures/title/Entei-128x128.png")});
+		shell.setText(getDefaultShellTitle());
+		shell.setImages(getDefaultImages());
 		Functions.centerShellOnPrimaryMonitor(shell);
 		
 		createContents();
 		
 		loadSettings();
+		serverListenPort.setSelection(RemoteAdmin.listenPort);
 		RemoteAdmin.setupListenSocket();
 		Credentials.initialize(rootDir);
 		Credentials.loadInstancesFromFile();
@@ -252,7 +278,7 @@ public class Main {
 		isRunning = true;
 		startRemoteAdmin();
 		openShell();
-		if(serverJar != null && serverJar.isFile()) {//Automatic startup if jar file is loaded from config
+		if(automaticServerStartup && isServerJarSelected()) {//Automatic startup if jar file is loaded from config
 			launchServer();
 		}
 		while(isRunning && !shell.isDisposed()) {
@@ -291,9 +317,97 @@ public class Main {
 		System.exit(0);
 	}
 	
+	private static final void setShellTitle() {
+		final String defaultTitle = getDefaultShellTitle();
+		String text = defaultTitle;
+		if(isServerJarSelected() && isProcessAlive()) {
+			System.out.println("Wrapper root dir: " + rootDir.getAbsolutePath());
+			System.out.println("Selected server jar: " + serverJar.getAbsolutePath());
+			File serverFolder = serverJar.getParentFile();
+			if(serverFolder.isDirectory()) {
+				System.out.println("Resulting server folder: " + serverFolder.getAbsolutePath());
+				File serverProperties = new File(serverFolder, "server.properties");
+				if(serverProperties.isFile()) {
+					System.out.println("Server properties file: " + serverProperties.getAbsolutePath());
+					byte[] bytes = StringUtil.readFile(serverProperties);
+					String data = bytes == null ? null : new String(bytes);
+					bytes = null;
+					if(data != null) {
+						String[] split = data.split(Pattern.quote("\n"));
+						final HashMap<String, String> properties = new HashMap<>();
+						for(String line : split) {
+							if(line.endsWith("\r")) {
+								line = line.substring(0, line.length() - 1);
+							}
+							String[] entry = line.split(Pattern.quote("="));
+							if(entry.length > 1) {
+								String pname = entry[0];
+								String value = StringUtil.stringArrayToString(entry, '=', 1).trim();
+								properties.put(pname, value);
+							}
+						}
+						final String serverName = properties.get("server-name");
+						final String motd = properties.get("motd");
+						if(serverName != null && !serverName.isEmpty()) {
+							text = serverName;
+						} else if(motd != null && !motd.isEmpty()) {
+							text = motd;
+						}
+					}
+				}
+			}
+		}
+		if(!defaultTitle.equals(text)) {
+			text = text.trim().replace("&", "&&").replaceAll(Pattern.quote("\r"), "").replaceAll(Pattern.quote("\n"), " ").trim();
+			RemoteClient.setServerTitle(text);
+			text += " - " + defaultTitle;
+		} else {
+			RemoteClient.setServerTitle(null);
+		}
+		Functions.setTextFor(shell, text);
+	}
+	
+	private static final void setShellIcon() {
+		Image[] images = getDefaultImages();
+		if(isServerJarSelected() && isProcessAlive()) {
+			File serverFolder = serverJar.getParentFile();
+			if(serverFolder.isDirectory()) {//i.e. if it exists and is a directory
+				File serverIcon = new File(serverFolder, "server-icon.png");
+				if(!serverIcon.exists()) {
+					serverIcon = new File(serverFolder, "server-icon.ico");
+				}
+				if(serverIcon.isFile()) {//i.e. if it exists and is a file
+					Image image = SWTResourceManager.getImage(serverIcon.getAbsolutePath());
+					if(image != null) {
+						RemoteClient.setServerIconFile(serverIcon);
+						images = new Image[] {image};
+					} else {
+						RemoteClient.setServerIconFile(null);
+					}
+				}
+			}
+		} else {
+			RemoteClient.setServerIconFile(null);
+		}
+		Functions.setShellImages(shell, images);
+	}
+	
+	private static final void updateShellAppearance() {
+		if(!checkThreadAccess()) {
+			updateShellAppearance = true;
+			return;
+		}
+		updateShellAppearance = false;
+		setShellTitle();
+		setShellIcon();
+		if(!isProcessAlive()) {
+			RemoteClient.setServerIconFile(null);
+		}
+	}
+	
 	public static final void launchServer() {
 		if(isProcessAlive() || !isServerJarSelected()) {
-			startServer = false;//Prevents potential loops
+			startServer = false;//Prevents potential loops/stackoverflows
 			return;
 		}
 		if(!checkThreadAccess()) {
@@ -319,10 +433,62 @@ public class Main {
 			builder.redirectInput(Redirect.PIPE);
 			builder.directory(serverJar.getParentFile());
 			process = new ProcessIO(builder.start());
-			startServer = false;
+			process.startThreads(new Runnable() {
+				@Override
+				public final void run() {
+					final ProcessIO THIS = process;
+					//byte[] buf = new byte[4096];
+					//int read;
+					while(THIS.process.isAlive()) {
+						try {
+							String line = StringUtil.readLine(THIS.out);
+							if(line != null) {
+								addLogToConsole(line);
+							}
+							/*read = THIS.out.read(buf);
+							if(read != -1) {
+								Main.out.write(buf, 0, read);
+							} else {
+								break;
+							}*/
+						} catch(IOException e) {
+							e.printStackTrace();
+							break;
+						}
+					}
+					//System.out.println("Out stream ended.");
+				}
+			}, new Runnable() {
+				@Override
+				public final void run() {
+					final ProcessIO THIS = process;
+					//byte[] buf = new byte[4096];
+					//int read;
+					while(THIS.process.isAlive()) {
+						try {
+							String line = StringUtil.readLine(THIS.err);
+							if(line != null) {
+								addErrorToConsole(line);
+							}
+							/*read = THIS.err.read(buf);
+							if(read != -1) {
+								Main.err.write(buf, 0, read);
+							} else {
+								break;
+							}*/
+						} catch(IOException e) {
+							e.printStackTrace();
+							break;
+						}
+					}
+					//System.err.println("Error stream ended.");
+				}
+			});
+			updateShellAppearance();
 		} catch(IOException e) {
 			appendLog("Failed to launch server: " + Functions.throwableToStr(e));
 		}
+		startServer = false;
 	}
 	
 	public static final void stopServer() {
@@ -349,6 +515,7 @@ public class Main {
 					break;
 				}
 			}
+			updateShellAppearance();
 		}
 	}
 	
@@ -358,79 +525,10 @@ public class Main {
 		Main.out.write(data, 0, data.length);
 	}
 	
-	public static final class ProcessIO {
-		public final Process		process;
-		
-		public final InputStream	out;
-		public final InputStream	err;
-		public final OutputStream	in;
-		public final PrintWriter	input;
-		
-		public ProcessIO(Process process) {
-			this.process = process;
-			this.out = process.getInputStream();
-			this.err = process.getErrorStream();
-			this.in = process.getOutputStream();
-			this.input = new PrintWriter(new OutputStreamWriter(this.in, StandardCharsets.UTF_8), true);
-			Thread outReader = new Thread() {
-				@Override
-				public final void run() {
-					final ProcessIO THIS = ProcessIO.this;
-					byte[] buf = new byte[4096];
-					int read;
-					while(THIS.process.isAlive()) {
-						try {
-							String line = StringUtil.readLine(THIS.out);
-							if(line != null) {
-								addLogToConsole(line);
-								/*read = THIS.out.read(buf);
-								if(read != -1) {
-									Main.out.write(buf, 0, read);
-								} else {
-									break;
-								}*/
-							}
-						} catch(IOException e) {
-							e.printStackTrace();
-							break;
-						}
-					}
-					//System.out.println("Out stream ended.");
-				}
-			};
-			Thread errReader = new Thread() {
-				@Override
-				public final void run() {
-					final ProcessIO THIS = ProcessIO.this;
-					byte[] buf = new byte[4096];
-					int read;
-					while(THIS.process.isAlive()) {
-						try {
-							read = THIS.err.read(buf);
-							if(read != -1) {
-								Main.err.write(buf, 0, read);
-							} else {
-								break;
-							}
-						} catch(IOException e) {
-							e.printStackTrace();
-							break;
-						}
-					}
-					//System.err.println("Error stream ended.");
-				}
-			};
-			outReader.setDaemon(true);
-			errReader.setDaemon(true);
-			if(!this.process.isAlive()) {
-				while(!this.process.isAlive()) {
-					Functions.sleep(10L);
-				}
-			}
-			outReader.start();
-			errReader.start();
-		}
-		
+	public static final void addErrorToConsole(String err) {
+		RemoteClient.sendLogToClients("WARN: " + err);
+		byte[] data = (err + "\r\n").getBytes(StandardCharsets.UTF_8);
+		Main.err.write(data, 0, data.length);
 	}
 	
 	public static final void handleInput(final String input) {
@@ -446,7 +544,7 @@ public class Main {
 	protected static final void setTextFor(StyledText styledText) {
 		String text = "";
 		if(styledText == output) {//if(errorStr == null) {
-			text = outTxt.getValue();
+			text = outTxt.getValue() + ">";//XXX Console caret addition
 		} else if(styledText == error) {
 			text = errTxt.getValue();
 		}
@@ -524,6 +622,8 @@ public class Main {
 						Main.consoleFontStrikeout = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("fontUnderlined")) {
 						Main.consoleFontUnderLined = Boolean.valueOf(value).booleanValue();
+					} else if(pname.equalsIgnoreCase("automaticServerStartup")) {
+						Main.automaticServerStartup = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("serverJar")) {
 						File oldServerJar = serverJar;
 						serverJar = new File(value);
@@ -553,7 +653,6 @@ public class Main {
 						}
 					} else if(pname.equalsIgnoreCase("enableRemoteAdministration")) {
 						RemoteAdmin.enableRemoteAdministration = Boolean.valueOf(value).booleanValue();
-						System.out.println("Set enableRemoteAdministration to " + RemoteAdmin.enableRemoteAdministration + " because saved value was: " + value);
 					}
 				}
 			}
@@ -568,14 +667,15 @@ public class Main {
 	protected static final boolean saveSettings() {
 		try(PrintWriter pr = new PrintWriter(new OutputStreamWriter(new FileOutputStream(settingsFile), StandardCharsets.UTF_8), true)) {
 			pr.println("# Console font settings:");
-			pr.println("fontName=" + consoleFontName);
-			pr.println("fontSize=" + consoleFontSize);
-			pr.println("fontBold=" + consoleFontBold);
-			pr.println("fontItalicized=" + consoleFontItalicized);
-			pr.println("fontStrikeout=" + consoleFontStrikeout);
-			pr.println("fontUnderLined=" + consoleFontUnderLined);
+			pr.println("fontName=" + Main.consoleFontName);
+			pr.println("fontSize=" + Main.consoleFontSize);
+			pr.println("fontBold=" + Main.consoleFontBold);
+			pr.println("fontItalicized=" + Main.consoleFontItalicized);
+			pr.println("fontStrikeout=" + Main.consoleFontStrikeout);
+			pr.println("fontUnderLined=" + Main.consoleFontUnderLined);
 			pr.println("");
 			pr.println("# Minecraft server configuration:");
+			pr.println("automaticServerStartup=" + Main.automaticServerStartup);
 			pr.println("serverJar=" + serverJar.getAbsolutePath());
 			pr.println("vmArgs=" + txtVmArgs.getText());
 			pr.println("progArgs=" + txtProgramArgs.getText());
@@ -585,6 +685,7 @@ public class Main {
 			pr.println("# Remote administration settings:");
 			pr.println("remAdminListenPort=" + RemoteAdmin.listenPort);
 			pr.println("enableRemoteAdministration=" + RemoteAdmin.enableRemoteAdministration);
+			pr.println();
 			return true;
 		} catch(Throwable ignored) {
 			return false;
@@ -834,6 +935,7 @@ public class Main {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				FileDialog dialog = new FileDialog(shell, SWT.NONE);
+				dialog.setText("Select Main Java Executable");
 				dialog.setFileName("java");
 				dialog.setFilterPath(Main.javaHome);
 				String javaPath = dialog.open();
@@ -849,7 +951,45 @@ public class Main {
 		
 		new MenuItem(menu_1, SWT.SEPARATOR);
 		
-		MenuItem mntmExittaltf = new MenuItem(menu_1, SWT.NONE);
+		mntmOpenServerFolder = new MenuItem(menu_1, SWT.NONE);
+		mntmOpenServerFolder.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent event) {
+				if(isServerJarSelected()) {
+					try {
+						Desktop.getDesktop().open(serverJar.getParentFile());
+					} catch(Throwable e) {
+						System.err.print("Unable to browse to folder: ");
+						e.printStackTrace();
+					}
+				}
+			}
+		});
+		mntmOpenServerFolder.setText("Open server folder");
+		
+		mntmStartServerAutomatically = new MenuItem(menu_1, SWT.CHECK);
+		mntmStartServerAutomatically.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				Main.automaticServerStartup = mntmStartServerAutomatically.getSelection();
+			}
+		});
+		mntmStartServerAutomatically.setSelection(Main.automaticServerStartup);
+		mntmStartServerAutomatically.setText("Start server automatically on startup");
+		
+		mntmSendServerInfo = new MenuItem(menu_1, SWT.CHECK);
+		mntmSendServerInfo.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				Main.sendServerInfoToClients = mntmSendServerInfo.getSelection();
+			}
+		});
+		mntmSendServerInfo.setSelection(true);
+		mntmSendServerInfo.setText("Send server info to clients");
+		
+		new MenuItem(menu_1, SWT.SEPARATOR);
+		
+		mntmExittaltf = new MenuItem(menu_1, SWT.NONE);
 		mntmExittaltf.setAccelerator(SWT.ALT | SWT.F4);
 		mntmExittaltf.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -858,6 +998,20 @@ public class Main {
 			}
 		});
 		mntmExittaltf.setText("E&xit\t(Alt+F4)");
+		
+		mntmabout = new MenuItem(menu, SWT.NONE);
+		mntmabout.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				if(!aboutDialogIsOpen) {
+					aboutDialogIsOpen = true;
+					new AboutDialog(shell).open();
+					aboutDialogIsOpen = false;
+				}
+			}
+		});
+		mntmabout.setAccelerator(SWT.ALT | 'A');
+		mntmabout.setText("&About...");
 		
 		Label lblConsoleOutput = new Label(shell, SWT.NONE);
 		lblConsoleOutput.setBounds(384, 56, 95, 15);
@@ -886,9 +1040,11 @@ public class Main {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				FileDialog dialog = new FileDialog(shell, SWT.NONE);
+				dialog.setText("Choose server .jar");
 				dialog.setFileName("minecraft_server.jar");
-				dialog.setFilterExtensions(new String[] {"*.jar", "*.exe"});
-				dialog.setFilterPath(rootDir.getAbsolutePath());
+				dialog.setFilterExtensions(new String[] {"*.jar;*.exe", "*.jar", "*.exe"});
+				final File jarParent = serverJar == null ? null : serverJar.getParentFile();
+				dialog.setFilterPath(jarParent == null ? rootDir.getAbsolutePath() : jarParent.getAbsolutePath());
 				String serverJarPath = dialog.open();
 				if(serverJarPath != null) {
 					File serverJar = new File(serverJarPath);
@@ -1022,6 +1178,8 @@ public class Main {
 				}
 			}
 		});
+		
+		appendLog("Type 'cls' and press enter to clear the screen,\nor type 'setfont ?' and press enter to view font commands.");
 	}
 	
 	protected static final void startRemoteAdmin() {
@@ -1037,6 +1195,10 @@ public class Main {
 						RemoteAdmin.listenPort = RemoteAdmin.defaultListenPort;
 					}
 					mainLoop();
+					if(!RemoteAdmin.enableRemoteAdministration) {
+						stopRemoteAdmin();//Just in case.
+						break;
+					}
 				}
 				serverListenPort.setSelection(RemoteAdmin.listenPort);
 				serverListenPort.setEnabled(false);
@@ -1052,19 +1214,23 @@ public class Main {
 	}
 	
 	protected static final void stopRemoteAdmin() {
-		RemoteAdmin.closeListenSocket();
 		RemoteAdmin.enableRemoteAdministration = false;
+		RemoteAdmin.closeListenSocket();
 	}
 	
 	protected static final void changePort() {
 		int oldPort = RemoteAdmin.listenPort;
 		RemoteAdmin.listenPort = serverListenPort.getSelection();
 		if(oldPort != RemoteAdmin.listenPort) {
+			RemoteAdmin.changeClientPorts();
 			startRemoteAdmin();
 		}
 	}
 	
 	public static final void shutdown() {
+		if(aboutDialogIsOpen) {
+			return;
+		}
 		isRunning = false;
 	}
 	
@@ -1131,6 +1297,9 @@ public class Main {
 	}
 	
 	private static final void updateUI() {
+		if(updateShellAppearance) {
+			updateShellAppearance();
+		}
 		resizeToShellSize();
 		serverState = (Main.isProcessAlive() ? "ACTIVE" : (Main.hasProcessDied() ? "DEAD" : "NOT_STARTED")) + "," + (Main.isServerJarSelected() ? "SELECTED" : "NOT-SELECTED");
 		final boolean serverJarExists = isServerJarSelected();
@@ -1155,7 +1324,13 @@ public class Main {
 		txtVmArgs.setEnabled(!processIsAlive);
 		txtProgramArgs.setEnabled(!processIsAlive);
 		btnChooseJar.setEnabled(!processIsAlive);
+		if(mntmExittaltf.getEnabled() == aboutDialogIsOpen) {
+			mntmExittaltf.setEnabled(!aboutDialogIsOpen);
+		}
 		mntmSelectJavaExecutable.setEnabled(!processIsAlive);
+		mntmStartServerAutomatically.setSelection(Main.automaticServerStartup);
+		mntmSendServerInfo.setSelection(Main.sendServerInfoToClients);
+		mntmOpenServerFolder.setEnabled(serverJarExists);
 		setTextFor(output);
 		setTextFor(error);
 		if(RemoteAdmin.enableRemoteAdministration) {
@@ -1218,4 +1393,5 @@ public class Main {
 			shell.setVisible(false);
 		}
 	}
+	
 }

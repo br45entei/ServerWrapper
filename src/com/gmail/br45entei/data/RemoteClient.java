@@ -1,13 +1,12 @@
-/**
- * 
- */
 package com.gmail.br45entei.data;
 
 import com.gmail.br45entei.main.Main;
+import com.gmail.br45entei.main.RemoteAdmin;
 import com.gmail.br45entei.swt.Functions;
 import com.gmail.br45entei.util.StringUtil;
 
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -43,6 +42,17 @@ public final class RemoteClient implements Closeable {
 		}
 	}
 	
+	public static final void sendCommandToClients(String cmd) {
+		if(cmd == null || cmd.trim().isEmpty()) {
+			return;
+		}
+		for(RemoteClient client : new ArrayList<>(instances)) {
+			if(client.socket.isConnected() && !client.socket.isClosed()) {
+				client.println(cmd);
+			}
+		}
+	}
+	
 	public final Socket									socket;
 	public final InputStream							in;
 	public final OutputStream							outStream;
@@ -57,6 +67,48 @@ public final class RemoteClient implements Closeable {
 	private final ConcurrentHashMap<Integer, String>	cmdsToSend				= new ConcurrentHashMap<>();
 	private volatile int								cmdsSent				= 0;
 	
+	private static volatile File						serverIconToSend		= null;
+	private static volatile byte[]						serverIconData			= null;
+	private static volatile String						serverTitle				= null;
+	private volatile boolean							sentServerIcon			= false;
+	private volatile boolean							sentServerTitle			= false;
+	
+	public static final void setServerTitle(String title) {
+		if(!Main.sendServerInfoToClients || title == null) {
+			if(serverTitle != null) {
+				serverTitle = null;
+				for(RemoteClient client : new ArrayList<>(instances)) {
+					client.sentServerTitle = true;
+				}
+			}
+		} else if(!title.isEmpty()) {
+			if(!title.equals(serverTitle)) {
+				serverTitle = title;
+				for(RemoteClient client : new ArrayList<>(instances)) {
+					client.sentServerTitle = false;
+				}
+			}
+		}
+	}
+	
+	public static final void setServerIconFile(File serverIcon) {
+		if(!Main.sendServerInfoToClients) {
+			serverIconToSend = serverIcon;
+			serverIconData = null;
+			for(RemoteClient client : new ArrayList<>(instances)) {
+				client.sentServerIcon = false;
+			}
+			return;
+		}
+		serverIconToSend = serverIcon;
+		serverIconData = null;//Let one of the client processes read the file
+		if(serverIconToSend != null) {
+			for(RemoteClient client : new ArrayList<>(instances)) {
+				client.sentServerIcon = false;
+			}
+		}
+	}
+	
 	public RemoteClient(Socket socket) throws IOException {
 		this.socket = socket;
 		this.in = socket.getInputStream();
@@ -67,8 +119,9 @@ public final class RemoteClient implements Closeable {
 			public final void run() {
 				while(!socket.isClosed()) {
 					sendCommands();
-					Functions.sleep(10L);
+					Functions.sleep(1L);
 					sendLogs();
+					Functions.sleep(10L);
 				}
 			}
 		};
@@ -78,10 +131,50 @@ public final class RemoteClient implements Closeable {
 			log = log.endsWith("\r") ? log.substring(0, log.length() - 1) : log;
 			this.addLog(log);
 		}
+		split = Main.getConsoleErrors().split(Pattern.quote("\n"));
+		for(String log : split) {
+			log = log.endsWith("\r") ? log.substring(0, log.length() - 1) : log;
+			this.addLog("WARN: " + log);
+		}
 		instances.add(this);
 	}
 	
 	protected final void sendCommands() {
+		if(serverTitle == null) {
+			if(this.sentServerTitle) {
+				this.sentServerTitle = false;
+				this.out.print("TITLE: null\n");
+				this.out.flush();
+			}
+		} else {
+			if(!this.sentServerTitle && serverTitle != null) {
+				this.out.print("TITLE: " + serverTitle + "\n");
+				this.out.flush();
+			}
+		}
+		if(serverIconToSend == null) {
+			if(this.sentServerIcon) {
+				this.sentServerIcon = false;
+				this.out.print("FAVICON: length=0\n");
+				this.out.flush();
+			}
+			serverIconData = null;
+		} else if(!this.sentServerIcon && serverIconToSend.isFile()) {
+			this.sentServerIcon = true;
+			if(serverIconData == null) {
+				serverIconData = StringUtil.readFile(serverIconToSend);//Reads the file if the data is null
+			}
+			if(serverIconData != null) {
+				try {
+					this.outStream.write(("FAVICON: length=" + serverIconData.length + "\r\n").getBytes(StandardCharsets.UTF_8));
+					this.outStream.flush();
+					this.outStream.write(serverIconData, 0, serverIconData.length);
+					this.outStream.flush();
+				} catch(IOException ignored) {
+				}
+				Functions.sleep(10L);
+			}
+		}
 		if(this.cmdsSent < this.cmdsToSend.size()) {
 			while(this.cmdsSent <= this.cmdsToSend.size()) {
 				Integer key = Integer.valueOf(this.cmdsSent);
@@ -109,7 +202,7 @@ public final class RemoteClient implements Closeable {
 	protected final void sendLogs() {
 		if(this.logsSent == -1) {
 			this.logsSent = 0;
-			this.out.print("RemAdmin/1.0 10 RESET LOGS\r\n");
+			this.out.print(RemoteAdmin.PROTOCOL + " 10 RESET LOGS\r\n");
 			this.out.flush();
 			Functions.sleep(100L);
 		}
@@ -121,10 +214,10 @@ public final class RemoteClient implements Closeable {
 					break;
 				}
 				if(log != null) {
-					if(!log.trim().equals(">")) {
-						this.out.print("LOG: " + log + "\r\n");
-						this.out.flush();
-					}
+					//if(!log.trim().equals(">")) {
+					this.out.print((log.startsWith("WARN: ") ? "" : "LOG: ") + log + "\r\n");
+					this.out.flush();
+					//}
 				}
 				if(this.logsSent == -1) {
 					break;
@@ -188,7 +281,7 @@ public final class RemoteClient implements Closeable {
 	}
 	
 	public final void addLog(String log) {
-		if(log != null) {
+		if(log != null && !log.isEmpty()) {
 			Integer key = new Integer(this.logsToSend.size());
 			this.logsToSend.put(key, log);
 		}
