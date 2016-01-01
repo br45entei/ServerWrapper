@@ -676,7 +676,10 @@ public final class Main {
 			pr.println("");
 			pr.println("# Minecraft server configuration:");
 			pr.println("automaticServerStartup=" + Main.automaticServerStartup);
-			pr.println("serverJar=" + serverJar.getAbsolutePath());
+			final String sJarPath = serverJar.getAbsolutePath();//The following extra code allows for saving a relative file path if the user moves their server files around a lot(e.g. removable drive, rename a parent folder, etc.)
+			int indexOfDot = sJarPath.indexOf(".\\");
+			indexOfDot = indexOfDot == -1 ? sJarPath.indexOf("./") : indexOfDot;
+			pr.println("serverJar=" + (indexOfDot != -1 ? sJarPath.substring(indexOfDot) : sJarPath));
 			pr.println("vmArgs=" + txtVmArgs.getText());
 			pr.println("progArgs=" + txtProgramArgs.getText());
 			pr.println("javaHome=" + JavaProgramArguments.getArguments().javaHome);

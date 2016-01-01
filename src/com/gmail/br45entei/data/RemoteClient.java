@@ -15,7 +15,9 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Pattern;
 
 /** @author Brian_Entei */
@@ -61,7 +63,7 @@ public final class RemoteClient implements Closeable {
 	private final Thread								logSender;
 	private volatile boolean							hasLogSenderBeenStarted	= false;
 	
-	protected final ConcurrentHashMap<Integer, String>	logsToSend				= new ConcurrentHashMap<>();
+	protected final ConcurrentLinkedQueue<String>		logsToSend				= new ConcurrentLinkedQueue<>();
 	protected volatile int								logsSent				= 0;
 	
 	private final ConcurrentHashMap<Integer, String>	cmdsToSend				= new ConcurrentHashMap<>();
@@ -207,9 +209,14 @@ public final class RemoteClient implements Closeable {
 			Functions.sleep(100L);
 		}
 		if(this.logsSent < this.logsToSend.size()) {
-			while(this.logsSent < this.logsToSend.size()) {
-				Integer key = Integer.valueOf(this.logsSent);
-				String log = this.logsToSend.get(key);
+			if(this.logsToSend.size() > 500) {
+				while(this.logsToSend.size() > 500) {
+					this.logsToSend.poll();
+				}
+			}
+			Iterator<String> iterator = this.logsToSend.iterator();
+			while(iterator.hasNext()) {
+				String log = iterator.next();
 				if(this.logsSent == -1) {
 					break;
 				}
@@ -282,8 +289,7 @@ public final class RemoteClient implements Closeable {
 	
 	public final void addLog(String log) {
 		if(log != null && !log.isEmpty()) {
-			Integer key = new Integer(this.logsToSend.size());
-			this.logsToSend.put(key, log);
+			this.logsToSend.add(log);
 		}
 	}
 	
