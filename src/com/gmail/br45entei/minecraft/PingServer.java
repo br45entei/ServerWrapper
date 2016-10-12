@@ -12,10 +12,11 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 
 /** @author Brian_Entei */
+@SuppressWarnings("javadoc")
 public class PingServer {
 	
 	/** byte value of 254 */
-	public static final int	pingByte	= 0xFE;
+	public static final int pingByte = 0xFE;
 	
 	public static final String pingServer(String ip, int port) {
 		try {

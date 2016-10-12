@@ -1,7 +1,7 @@
 package com.gmail.br45entei.main;
 
-import com.gmail.br45entei.data.Credentials;
 import com.gmail.br45entei.data.RemoteClient;
+import com.gmail.br45entei.main.CredentialsManager.Credential;
 import com.gmail.br45entei.swt.Functions;
 import com.gmail.br45entei.util.StringUtil;
 
@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 import javax.xml.bind.DatatypeConverter;
 
 /** @author Brian_Entei */
+@SuppressWarnings("javadoc")
 public class RemoteAdmin {
 	
 	public static final int					fNumberOfThreads			= 20;
@@ -41,10 +42,6 @@ public class RemoteAdmin {
 	protected static volatile boolean		hasListenThreadStarted		= false;
 	
 	private static volatile int				lastListenPort				= listenPort;
-	
-	protected static final Credentials getRemoteAdminCreds() {
-		return Credentials.getOrCreateCredentials("RemoteAdmin");
-	}
 	
 	public static final void changeClientPorts() {
 		if(lastListenPort != listenPort) {
@@ -121,15 +118,14 @@ public class RemoteAdmin {
 				@Override
 				public final void run() {
 					try {
-						Credentials remoteAdmin = getRemoteAdminCreds();
 						while(listenSocket != null && !listenSocket.isClosed() && Main.isRunning()) {
 							try {
-								handleRemoteAdminClient(listenSocket.accept(), remoteAdmin);
+								handleRemoteAdminClient(listenSocket.accept());
 							} catch(SocketException ignored) {
 								return;
 							} catch(IOException e) {
 								e.printStackTrace();
-								Main.appendLog("Unable to handle incoming client for remote administration: " + Functions.throwableToStr(e));
+								Main.appendLog("[ServerWrapper] Unable to handle incoming client for remote administration: " + Functions.throwableToStr(e));
 							}
 						}
 					} catch(Throwable e) {
@@ -169,12 +165,15 @@ public class RemoteAdmin {
 		return false;
 	}
 	
-	protected static final void handleRemoteAdminClient(final Socket socket, final Credentials remoteAdmin) throws RejectedExecutionException {
+	protected static final void handleRemoteAdminClient(final Socket socket) throws RejectedExecutionException {
 		Runnable command = new Runnable() {
 			@Override
 			public final void run() {
+				String clientUsername = null;
+				String clientIp = null;
 				try {
 					RemoteClient client = new RemoteClient(socket);
+					clientIp = client.getIpAddress();
 					String authenticationLine = client.readLine();
 					if(authenticationLine != null && !authenticationLine.isEmpty()) {
 						String[] args = authenticationLine.split(Pattern.quote(" "));
@@ -201,9 +200,13 @@ public class RemoteAdmin {
 										String[] creds = clientResponse.split(":");
 										String username = creds.length == 2 ? creds[0] : "";
 										String password = creds.length == 2 ? creds[1] : "";
-										if(remoteAdmin.doCredentialsMatch(username, password)) {
+										clientUsername = username;
+										client.setUsername(username);
+										final Credential user = Main.getCredentialsFor(username, password);
+										if(user != null) {
 											client.println(PROTOCOL + " 42 PASS");
 											client.startSendingLogs();
+											Main.appendLog("User \"" + client.getUsername() + "\" logged in from: " + client.getIpAddress());
 											while(!client.socket.isClosed()) {
 												String data = "";
 												String line;
@@ -214,18 +217,20 @@ public class RemoteAdmin {
 														}
 														data += line + "\r\n";
 													}
-													if(!handleRemoteAdminClientData(data, client)) {
+													if(!handleRemoteAdminClientData(data, client, user)) {
 														break;
 													}
 												} catch(IOException e) {
-													client.println(PROTOCOL + " 25 ERROR PARSING DATA: " + Functions.throwableToStr(e));
+													client.println(PROTOCOL + " 25 ERROR PARSING DATA: " + Functions.throwableToStr(e).replace("\r\n", " ").replace("\n", " "));
 													if(client.out.checkError()) {
 														break;
 													}
 												}
 												Functions.sleep(10L);
 											}
+											Main.appendLog("User \"" + client.getDisplayName() + "\" disconnected.");
 										} else {
+											Main.appendLog("User \"" + client.getUsername() + "\"(" + client.getIpAddress() + ") failed to log in: Unknown username or bad password. ");
 											client.println(PROTOCOL + " 1 Authentication Failure");
 										}
 									} else {
@@ -237,25 +242,28 @@ public class RemoteAdmin {
 										final boolean clientOutdated = serverVersion > clientVrsn;
 										client.out.println(PROTOCOL + " 2 Version Mismatch: " + (clientOutdated ? "Client out of date!" : "Server out of date!"));
 										client.out.flush();
-										client.out.println("Server is running: " + PROTOCOL_VERSION);
+										client.out.println("This server is running: " + PROTOCOL_VERSION);
 										client.out.flush();
 										client.out.println("You(the client) are running: " + (clientVrsn == -1 ? "-1 (Invalid version: \"" + clientVersion + "\"!)" : clientVrsn + ""));
 										client.out.flush();
 										if(clientOutdated) {
-											client.out.println("Download an updated client at: http://redsandbox.no-ip.org/Files/ServerWrapper/ServerWrapperClient.jar");
+											client.out.println("Download an updated client at: http://redsandbox.ddns.net/Files/ServerWrapper/ServerWrapperClient.jar");
 										} else {
-											Main.appendLog("An updated client(version: " + clientVrsn + ") just attempted to connect to this server!");
-											Main.appendLog("Download an updated server wrapper at: http://redsandbox.no-ip.org/Files/ServerWrapper/ServerWrapper.jar");
+											Main.appendLog("==An updated client(version: " + clientVrsn + ") just attempted to connect to this server!");
+											Main.appendLog("==Download an updated server wrapper at: http://redsandbox.ddns.net/Files/ServerWrapper/ServerWrapper.jar");
 										}
 										client.out.flush();
 									}
 								} else {
+									Main.appendLog("Failed login from: \"" + client.getIpAddress() + "\"; Cause: Unknown protocol \"" + protocolVersion + "\"!");
 									client.println(PROTOCOL + " 24 UNKNOWN PROTOCOL");
 								}
 							} else {
+								Main.appendLog("Failed login from: \"" + client.getIpAddress() + "\"; Cause: Unknown method \"" + method + "\"!");
 								client.println(PROTOCOL + " 23 UNKNOWN METHOD");
 							}
 						} else {
+							Main.appendLog("Failed login from: \"" + client.getIpAddress() + "\"; Cause: Bad/malformed authentication line!");
 							client.println(PROTOCOL + " 22 BAD REQUEST - LENGTH: " + args.length + "; REQUEST RECEIVED: \"" + authenticationLine + "\"");
 						}
 					}
@@ -266,17 +274,21 @@ public class RemoteAdmin {
 					}
 					client.close();
 				} catch(IOException e) {
-					Main.appendLog("Failed to handle remote admin client data: " + Functions.throwableToStr(e));
+					Main.appendLog("==Failed to handle remote admin client data: " + Functions.throwableToStr(e));
+					if(clientIp != null) {
+						Main.appendLog("User \"" + clientUsername + " @ " + clientIp + "\" disconnected.");
+					}
 				}
 			}
 		};
 		fThreadPool.execute(command);
 	}
 	
-	protected static final boolean handleRemoteAdminClientData(String data, RemoteClient client) {
+	protected static final boolean handleRemoteAdminClientData(String data, RemoteClient client, Credential user) {
 		if(data.trim().isEmpty()) {
 			return true;
 		}
+		user = user == null ? Credential.fullAccessUser : user;
 		boolean continueData = true;
 		String[] split = data.split(Pattern.quote("\r\n"));
 		for(String line : split) {
@@ -286,13 +298,17 @@ public class RemoteAdmin {
 					continue;
 				}
 				if(line.toUpperCase().startsWith("COMMAND: ")) {
-					String command = line.substring("COMMAND:".length());
-					command = command.startsWith(" ") ? command.substring(1) : command;
-					try {
-						Main.handleInput(command);
-					} catch(Throwable e) {
-						client.println("COMMAND_ERROR: " + Functions.throwableToStr(e));
-						client.println("COMMAND_ERROR_END");
+					if(user.allowConsoleAccess || !Main.isProcessAlive()) {
+						String command = line.substring("COMMAND:".length());
+						command = command.startsWith(" ") ? command.substring(1) : command;
+						try {
+							Main.handleInput(client, command);
+						} catch(Throwable e) {
+							client.println("COMMAND_ERROR: " + Functions.throwableToStr(e));
+							client.println("COMMAND_ERROR_END");
+						}
+					} else {
+						client.sendPopupMessage("You do not have permission to use the console!");
 					}
 				} else if(line.toUpperCase().startsWith("PING: ")) {
 					String pingStr = line.substring("PING:".length());
@@ -305,19 +321,57 @@ public class RemoteAdmin {
 					if(pname.equalsIgnoreCase("SERVER-STATE")) {
 						client.println("SERVER-STATE: " + Main.getServerState());
 						//Main.appendLog("TEST 1");
+					} else if(pname.equalsIgnoreCase("AUTOMATIC-RESTART")) {
+						client.println("AUTOMATIC-RESTART: " + Main.automaticServerRestart);
+					} else if(pname.equalsIgnoreCase("CPU-USAGE")) {
+						client.println("CPU-USAGE: " + Main.getProcessCpuUsage());
+					} else if(pname.equalsIgnoreCase("RAM-USAGE")) {
+						client.println("RAM-USAGE: " + Main.getProcessRamUsage());
+					} else if(pname.equalsIgnoreCase("THREAD-COUNT")) {
+						client.println("THREAD-COUNT: " + Main.getProcessThreadCount());
+					}
+				} else if(line.toUpperCase().startsWith("SET: ")) {
+					String getEntry = line.substring("SET:".length());
+					getEntry = getEntry.startsWith(" ") ? getEntry.substring(1) : getEntry;
+					if(getEntry.contains("=")) {
+						String[] entry = getEntry.split(Pattern.quote("="));
+						String pname = entry[0];
+						String pvalue = entry.length > 1 ? StringUtil.stringArrayToString(entry, '=', 1) : "";
+						if(pname.equalsIgnoreCase("AUTOMATIC-RESTART")) {
+							if(user.canRestartServer) {
+								Main.automaticServerRestart = Boolean.valueOf(pvalue.trim()).booleanValue();
+							} else {
+								client.sendPopupMessage("You do not have permission to change the automatic restart settings.");
+							}
+						}
 					}
 				} else if(line.equals("START-SERVER")) {
-					if(!Main.isProcessAlive()) {
-						Main.launchServer();
+					if(user.canRestartServer) {
+						if(!Main.isProcessAlive()) {
+							Main.launchServer(client);
+						}
+						client.println("SERVER-STATE: " + Main.getServerState());
+						//Main.appendLog("TEST 2");
+					} else {
+						client.sendPopupMessage("You do not have permission to start the server.");
 					}
-					client.println("SERVER-STATE: " + Main.getServerState());
-					//Main.appendLog("TEST 2");
 				} else if(line.equals("STOP-SERVER")) {
-					if(Main.isProcessAlive()) {
-						Main.stopServer();
+					if(user.canRestartServer) {
+						if(Main.isProcessAlive()) {
+							Main.stopServer(client);
+						}
+						client.println("SERVER-STATE: " + Main.getServerState());
+						//Main.appendLog("TEST 3");
+					} else {
+						client.sendPopupMessage("You do not have permission to stop the server.");
 					}
-					client.println("SERVER-STATE: " + Main.getServerState());
-					//Main.appendLog("TEST 3");
+				} else if(line.equals("RESTART-SERVER")) {
+					if(user.canRestartServer) {
+						Main.restartServer(client);
+						client.println("SERVER-STATE: " + Main.getServerState());
+					} else {
+						client.sendPopupMessage("You do not have permission to restart the server.");
+					}
 				}
 			}
 		}

@@ -20,10 +20,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
+
 /** @author Brian_Entei */
+@SuppressWarnings("javadoc")
 public final class RemoteClient implements Closeable {
 	
-	public static final ArrayList<RemoteClient>	instances	= new ArrayList<>();
+	public static final ConcurrentLinkedQueue<RemoteClient> instances = new ConcurrentLinkedQueue<>();
 	
 	public static final void resetClientLogs() {
 		for(RemoteClient client : new ArrayList<>(instances)) {
@@ -59,6 +62,7 @@ public final class RemoteClient implements Closeable {
 	public final InputStream							in;
 	public final OutputStream							outStream;
 	public final PrintWriter							out;
+	private volatile String								username				= "";
 	
 	private final Thread								logSender;
 	private volatile boolean							hasLogSenderBeenStarted	= false;
@@ -115,7 +119,7 @@ public final class RemoteClient implements Closeable {
 		this.socket = socket;
 		this.in = socket.getInputStream();
 		this.outStream = socket.getOutputStream();
-		this.out = new PrintWriter(new OutputStreamWriter(this.outStream, StandardCharsets.UTF_8), true);
+		this.out = new PrintWriter(new OutputStreamWriter(this.outStream, Main.stringCharset), true);
 		this.logSender = new Thread(Thread.currentThread().getName() + "_RemoteClientLogSender") {
 			@Override
 			public final void run() {
@@ -139,6 +143,29 @@ public final class RemoteClient implements Closeable {
 			this.addLog("WARN: " + log);
 		}
 		instances.add(this);
+	}
+	
+	public final String getUsername() {
+		return this.username;
+	}
+	
+	public final RemoteClient setUsername(String username) {
+		if(username != null) {
+			this.username = username;
+		}
+		return this;
+	}
+	
+	public final String getIpAddress() {
+		return StringUtils.replaceOnce(this.socket.getRemoteSocketAddress().toString(), "/", "");
+	}
+	
+	public final String getNickName() {
+		return(this.username.isEmpty() ? "<null>" : this.getUsername());
+	}
+	
+	public final String getDisplayName() {
+		return (this.username.isEmpty() ? "" : this.getUsername() + "@") + this.getIpAddress();
 	}
 	
 	protected final void sendCommands() {
@@ -168,7 +195,7 @@ public final class RemoteClient implements Closeable {
 			}
 			if(serverIconData != null) {
 				try {
-					this.outStream.write(("FAVICON: length=" + serverIconData.length + "\r\n").getBytes(StandardCharsets.UTF_8));
+					this.outStream.write(("FAVICON: length=" + serverIconData.length + "\r\n").getBytes(Main.stringCharset));
 					this.outStream.flush();
 					this.outStream.write(serverIconData, 0, serverIconData.length);
 					this.outStream.flush();
@@ -256,6 +283,24 @@ public final class RemoteClient implements Closeable {
 		}
 	}
 	
+	public final boolean sendPopupMessage(String msg) {
+		try {
+			byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+			this.out.println("MESSAGE: " + data.length);
+			this.out.flush();
+			this.outStream.write(data);
+			this.outStream.flush();
+			return true;
+		} catch(IOException e) {
+			e.printStackTrace();
+			return false;
+		}
+	}
+	
+	public final void disconnect() throws IOException {
+		this.close(RemoteAdmin.PROTOCOL + " -1 CLOSE");
+	}
+	
 	public final void close(String msg) throws IOException {
 		this.out.print(msg + "\r\n");
 		this.out.flush();
@@ -265,10 +310,7 @@ public final class RemoteClient implements Closeable {
 	
 	@Override
 	public final void close() throws IOException {
-		try {
-			instances.remove(this);
-		} catch(Throwable ignored) {
-		}
+		instances.remove(this);
 		this.out.close();
 		this.in.close();
 		this.outStream.close();
