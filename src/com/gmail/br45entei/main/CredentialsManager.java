@@ -236,7 +236,7 @@ public class CredentialsManager extends Dialog {
 		if(!this.display.readAndDispatch()) {
 			this.updateUI();
 			this.shell.update();
-			Functions.sleep(10L);//display.sleep();
+			Main.mainLoop();//Functions.sleep(10L);//display.sleep();
 		}
 	}
 	

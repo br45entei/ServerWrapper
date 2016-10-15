@@ -358,12 +358,22 @@ public class RemoteAdmin {
 				} else if(line.equals("STOP-SERVER")) {
 					if(user.canRestartServer) {
 						if(Main.isProcessAlive()) {
-							Main.stopServer(client);
+							Main.stopServer(client, false);
 						}
 						client.println("SERVER-STATE: " + Main.getServerState());
 						//Main.appendLog("TEST 3");
 					} else {
 						client.sendPopupMessage("You do not have permission to stop the server.");
+					}
+				} else if(line.equals("KILL-SERVER")) {
+					if(user.canRestartServer) {
+						if(Main.isProcessAlive()) {
+							Main.stopServer(client, true);
+						}
+						client.println("SERVER-STATE: " + Main.getServerState());
+						//Main.appendLog("TEST 3");
+					} else {
+						client.sendPopupMessage("You do not have permission to forcibly kill the server.");
 					}
 				} else if(line.equals("RESTART-SERVER")) {
 					if(user.canRestartServer) {

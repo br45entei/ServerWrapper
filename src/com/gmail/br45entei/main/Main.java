@@ -254,6 +254,7 @@ public final class Main {
 	protected static Button										btnStartServer;
 	protected static Button										btnStopServer;
 	protected static Button										btnRestartServer;
+	protected static Button										btnKillProcess;
 	protected static Button										btnChooseJar;
 	protected static Label										verticalSeparator;
 	protected static Label										horizontalSeparator;
@@ -651,7 +652,7 @@ public final class Main {
 			} else {
 				appendLog("Failed to start server: Unable to verify server process started successfully!");
 				startServer = false;
-				stopServer(null);
+				stopServer(null, false);
 			}
 		} catch(Throwable e) {
 			appendLog("Failed to launch server: " + Functions.throwableToStr(e));
@@ -696,7 +697,7 @@ public final class Main {
 	protected static final String			noConnText				= "There are no connected clients at this time.";
 	protected static final String			remAdminDisabled		= "Remote Administration is disabled. To allow clients to connect, please click the \"Enable\" button above.";
 	
-	public static final void stopServer(RemoteClient from) {
+	public static final void stopServer(RemoteClient from, boolean rightNow) {
 		if(stoppingServer) {
 			final String msg = "The server has already been told to shut down.\r\nGive it a second!";
 			if(from != null) {
@@ -713,31 +714,37 @@ public final class Main {
 			} else {
 				from = process.stopServerClient;
 			}
-			handleInput(from, "save-all\nstop");//process.process.destroyForcibly();
-			final long startTime = System.currentTimeMillis();
-			final long waitTime = 15000L;
-			long lastSecond = startTime;
-			int secondsWaited = 15;
-			serverStoppedByUser = true;
-			appendLog("Stopping server; waiting up to 15 seconds for server to shutdown:");
-			while(process != null && process.process.isAlive()) {
-				mainLoop();
-				final long now = System.currentTimeMillis();
-				long elapsedTime = now - startTime;
-				long elapsedSecondTime = now - lastSecond;
-				if(elapsedSecondTime >= 1000L) {
-					lastSecond = now;
-					appendLog("\t" + --secondsWaited + " seconds remaining");
-				}
-				if(elapsedTime > waitTime) {
-					if(process != null) {
-						process.process.destroyForcibly();
+			if(rightNow) {
+				appendLog("Forcibly closing server process; please wait...");
+				process.process.destroyForcibly();
+				serverStoppedByUser = true;
+			} else {
+				handleInput(from, "save-all\nstop");//process.process.destroyForcibly();
+				final long startTime = System.currentTimeMillis();
+				final long waitTime = 15000L;
+				long lastSecond = startTime;
+				int secondsWaited = 15;
+				serverStoppedByUser = true;
+				appendLog("Stopping server; waiting up to 15 seconds for server to shutdown:");
+				while(process != null && process.process.isAlive()) {
+					mainLoop();
+					final long now = System.currentTimeMillis();
+					long elapsedTime = now - startTime;
+					long elapsedSecondTime = now - lastSecond;
+					if(elapsedSecondTime >= 1000L) {
+						lastSecond = now;
+						appendLog("\t" + --secondsWaited + " seconds remaining");
 					}
-					break;
+					if(elapsedTime > waitTime) {
+						if(process != null) {
+							process.process.destroyForcibly();
+						}
+						break;
+					}
 				}
 			}
 			if(from != null) {
-				appendLog("Server shut down by \"" + from.getDisplayName() + "\".");
+				appendLog("Server " + (rightNow ? "forcibly closed" : "shut") + " down by \"" + from.getDisplayName() + "\".");
 			}
 			updateShellAppearance();
 		} else if(from != null) {
@@ -753,7 +760,7 @@ public final class Main {
 				from.println("SERVER-STATE: " + Main.getServerState());
 				appendLog("Restarting server; please wait...");
 			}
-			Main.stopServer(from);
+			Main.stopServer(from, false);
 			waitUntilProcessEnded();
 			stoppingServer = false;
 			delayedServerStartup(from);
@@ -1175,7 +1182,7 @@ public final class Main {
 		
 		error = new StyledText(shell, SWT.BORDER | SWT.READ_ONLY | SWT.H_SCROLL | SWT.V_SCROLL | SWT.CANCEL | SWT.MULTI);
 		error.setForeground(SWTResourceManager.getColor(SWT.COLOR_RED));
-		error.setBounds(10, 314, 360, 214);
+		error.setBounds(10, 345, 360, 183);
 		
 		btnSendInput = new Button(consoleOutputTabComposite, SWT.NONE);
 		btnSendInput.setBounds(340, 417, 75, 25);
@@ -1633,7 +1640,7 @@ public final class Main {
 		horizontalSeparator.setBounds(10, 10, shellSize.x - 30, 2);
 		
 		Label lblStderr = new Label(shell, SWT.NONE);
-		lblStderr.setBounds(10, 293, 95, 15);
+		lblStderr.setBounds(10, 324, 95, 15);
 		lblStderr.setText("Errors(Stderr):");
 		
 		Label lblServerJar = new Label(shell, SWT.NONE);
@@ -1710,26 +1717,26 @@ public final class Main {
 				launchServer(null);
 			}
 		});
-		btnStartServer.setBounds(10, 115, 116, 25);
+		btnStartServer.setBounds(10, 115, 177, 25);
 		btnStartServer.setText("Start Server");
 		
 		Label lblWrapperLog = new Label(shell, SWT.NONE);
-		lblWrapperLog.setBounds(10, 146, 95, 15);
+		lblWrapperLog.setBounds(10, 177, 95, 15);
 		lblWrapperLog.setText("Wrapper Log:");
 		
 		wrapperLog = new StyledText(shell, SWT.BORDER | SWT.READ_ONLY | SWT.V_SCROLL | SWT.H_SCROLL);
 		wrapperLog.setForeground(SWTResourceManager.getColor(SWT.COLOR_DARK_GRAY));
 		wrapperLog.setEditable(false);
-		wrapperLog.setBounds(10, 167, 360, 120);
+		wrapperLog.setBounds(10, 198, 360, 120);
 		
 		btnStopServer = new Button(shell, SWT.NONE);
 		btnStopServer.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				stopServer(null);
+				stopServer(null, false);
 			}
 		});
-		btnStopServer.setBounds(132, 115, 115, 25);
+		btnStopServer.setBounds(193, 115, 177, 25);
 		btnStopServer.setText("Stop Server");
 		
 		btnRestartServer = new Button(shell, SWT.NONE);
@@ -1739,8 +1746,18 @@ public final class Main {
 				restartServer(null);
 			}
 		});
-		btnRestartServer.setBounds(253, 115, 117, 25);
+		btnRestartServer.setBounds(10, 146, 177, 25);
 		btnRestartServer.setText("Restart Server");
+		
+		btnKillProcess = new Button(shell, SWT.NONE);
+		btnKillProcess.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				stopServer(null, true);
+			}
+		});
+		btnKillProcess.setBounds(193, 146, 177, 25);
+		btnKillProcess.setText("Kill Process");
 		
 		horizontalSeparator2 = new Label(shell, SWT.SEPARATOR | SWT.HORIZONTAL);
 		horizontalSeparator2.setBounds(384, 48, 500, 2);
@@ -1928,7 +1945,7 @@ public final class Main {
 		final Point resourceComTabSize = resourceTabComposite.getSize();
 		
 		Point outputSize = new Point(conOutComTabSize.x, conOutComTabSize.y - 30);//new Point(shellSize.x - 412, shellSize.y - 179);//492 413
-		Point errorSize = new Point(360, shellSize.y - 378);
+		Point errorSize = new Point(360, shellSize.y - 409);//378);
 		Rectangle inputFieldBounds = new Rectangle(0, conOutComTabSize.y - 25, conOutComTabSize.x - 158, 25);//new Rectangle(0, shellSize.y - 173, shellSize.x - 493, 25);//419 411 25
 		Point tabLocation = new Point(conOutComTabSize.x - 71, conOutComTabSize.y - 25);
 		Point sendInputLocation = new Point(conOutComTabSize.x - 152, conOutComTabSize.y - 25);//75 25//new Point(shellSize.x - 487, shellSize.y - 89);//417 419
@@ -2070,6 +2087,7 @@ public final class Main {
 		btnStartServer.setEnabled(serverJarExists ? process == null : false);
 		btnStopServer.setEnabled(processIsAlive);
 		btnRestartServer.setEnabled(processIsAlive);
+		btnKillProcess.setEnabled(processIsAlive);
 		//inputField.setEnabled(processIsAlive);
 		if(!inputField.getEnabled() && !inputField.getText().isEmpty()) {
 			inputField.setText("");
@@ -2192,7 +2210,7 @@ public final class Main {
 					while(System.currentTimeMillis() <= endTime) {
 						Main.mainLoop();
 					}
-					stopServer(null);
+					stopServer(null, false);
 					startServer = true;
 					appendLog("Restart complete.");
 				}
@@ -2445,7 +2463,7 @@ public final class Main {
 				@Override
 				public void handleEvent(Event event) {
 					if(isProcessAlive()) {
-						stopServer(null);
+						stopServer(null, false);
 					}
 				}
 			});
@@ -2622,5 +2640,4 @@ public final class Main {
 		}
 		
 	}
-	
 }
