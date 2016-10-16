@@ -39,16 +39,18 @@ public class JDKWarningDialog extends Dialog {
 	 * @return the result */
 	public Object open() {
 		createContents();
-		this.shell.open();
-		this.shell.layout();
-		Display display = getParent().getDisplay();
-		while(this.response == Response.NO_RESPONSE) {
-			if(!display.readAndDispatch()) {
-				display.sleep();
+		if(!Main.headless) {
+			this.shell.open();
+			this.shell.layout();
+			Display display = getParent().getDisplay();
+			while(this.response == Response.NO_RESPONSE) {
+				if(!display.readAndDispatch()) {
+					display.sleep();
+				}
 			}
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.dispose();
+			if(!this.shell.isDisposed()) {
+				this.shell.dispose();
+			}
 		}
 		return this.response;
 	}
@@ -86,4 +88,5 @@ public class JDKWarningDialog extends Dialog {
 		btnOk.setText("Ok");
 		
 	}
+	
 }

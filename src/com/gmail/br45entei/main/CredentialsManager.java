@@ -211,20 +211,22 @@ public class CredentialsManager extends Dialog {
 	public ArrayList<Credential> open() {
 		ArrayList<Credential> list = null;
 		createContents();
-		this.shell.open();
-		this.shell.layout();
-		this.display = getParent().getDisplay();
-		while(!this.shell.isDisposed()) {
-			if(this.result != Response.NO_RESPONSE) {
-				break;
+		if(!Main.headless) {
+			this.shell.open();
+			this.shell.layout();
+			this.display = getParent().getDisplay();
+			while(!this.shell.isDisposed()) {
+				if(this.result != Response.NO_RESPONSE) {
+					break;
+				}
+				this.runClock();
 			}
-			this.runClock();
-		}
-		if(this.result == Response.DONE) {
-			list = new ArrayList<>(this.credentials);
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.close();
+			if(this.result == Response.DONE) {
+				list = new ArrayList<>(this.credentials);
+			}
+			if(!this.shell.isDisposed()) {
+				this.shell.close();
+			}
 		}
 		return list;
 	}

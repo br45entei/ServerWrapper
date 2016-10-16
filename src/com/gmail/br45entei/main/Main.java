@@ -13,6 +13,7 @@ import com.gmail.br45entei.util.JavaProgramArguments;
 import com.gmail.br45entei.util.StringUtil;
 
 import java.awt.Desktop;
+import java.awt.GraphicsEnvironment;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -70,6 +71,9 @@ import org.eclipse.wb.swt.SWTResourceManager;
 /** @author Brian_Entei */
 @SuppressWarnings("javadoc")
 public final class Main {
+	
+	public static final boolean								headless				= GraphicsEnvironment.isHeadless();
+	// Would use https://www.x.org/archive/X11R6.8.2/doc/Xvfb.1.html , but not opening shell works too... XD
 	
 	public static final Charset								stringCharset			= StandardCharsets.UTF_8;
 	
@@ -1834,11 +1838,12 @@ public final class Main {
 			}
 		});
 		
-		final Tray tray = display.getSystemTray();
-		if(tray != null) {
-			trayIcon = new TrayIcon(shell, tray);
+		if(!headless) {
+			final Tray tray = display.getSystemTray();
+			if(tray != null) {
+				trayIcon = new TrayIcon(shell, tray);
+			}
 		}
-		
 		appendLog("==Type 'cls' and press enter to clear the screen,\nor type 'setfont ?' and press enter to view font commands.");
 	}
 	
@@ -2221,6 +2226,9 @@ public final class Main {
 	}
 	
 	protected static final void openShell() {
+		if(headless) {
+			return;
+		}
 		if(!shell.getVisible()) {
 			shell.setVisible(true);
 			shell.open();
@@ -2229,6 +2237,9 @@ public final class Main {
 	}
 	
 	protected static final void hideShell(boolean skipCheck) {
+		if(headless) {
+			return;
+		}
 		Tray tray = display.getSystemTray();
 		if(tray != null) {
 			boolean check = skipCheck;

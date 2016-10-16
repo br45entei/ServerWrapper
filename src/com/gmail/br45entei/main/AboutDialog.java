@@ -33,20 +33,22 @@ public class AboutDialog extends Dialog {
 	 * @return the result */
 	public Response open() {
 		this.createContents();
-		this.shell.open();
-		this.shell.layout();
-		//Display display = getParent().getDisplay();
-		while(!this.shell.isDisposed()) {
-			if(this.result != Response.NO_RESPONSE) {
-				break;
+		if(!Main.headless) {
+			this.shell.open();
+			this.shell.layout();
+			//Display display = getParent().getDisplay();
+			while(!this.shell.isDisposed()) {
+				if(this.result != Response.NO_RESPONSE) {
+					break;
+				}
+				Main.mainLoop();
+				/*if(!display.readAndDispatch()) {
+					display.sleep();
+				}*/
 			}
-			Main.mainLoop();
-			/*if(!display.readAndDispatch()) {
-				display.sleep();
-			}*/
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.close();
+			if(!this.shell.isDisposed()) {
+				this.shell.close();
+			}
 		}
 		return this.result;
 	}

@@ -40,20 +40,22 @@ public class FeatureNotImplementedDialog extends Dialog {
 	public Object open(String msg) {
 		createContents(msg);
 		Functions.centerShell2OnShell1(getParent(), this.shell);
-		this.shell.open();
-		this.shell.layout();
-		Display display = getParent().getDisplay();
-		while(!this.shell.isDisposed()) {
-			if(!display.readAndDispatch()) {
-				this.shell.update();
-				Functions.sleep(10L);//display.sleep();
+		if(!Main.headless) {
+			this.shell.open();
+			this.shell.layout();
+			Display display = getParent().getDisplay();
+			while(!this.shell.isDisposed()) {
+				if(!display.readAndDispatch()) {
+					this.shell.update();
+					Functions.sleep(10L);//display.sleep();
+				}
+				if(this.result != Response.NO_RESPONSE) {
+					break;
+				}
 			}
-			if(this.result != Response.NO_RESPONSE) {
-				break;
+			if(!this.shell.isDisposed()) {
+				this.shell.dispose();
 			}
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.dispose();
 		}
 		return this.result;
 	}

@@ -39,16 +39,18 @@ public class ConfirmHideWindowDialog extends Dialog {
 	 * @return the result */
 	public Response open() {
 		createContents();
-		this.shell.open();
-		this.shell.layout();
-		while(!this.shell.isDisposed()) {
-			Main.mainLoop();
-			if(this.result != Response.NO_RESPONSE) {
-				break;
+		if(!Main.headless) {
+			this.shell.open();
+			this.shell.layout();
+			while(!this.shell.isDisposed()) {
+				Main.mainLoop();
+				if(this.result != Response.NO_RESPONSE) {
+					break;
+				}
 			}
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.dispose();
+			if(!this.shell.isDisposed()) {
+				this.shell.dispose();
+			}
 		}
 		return this.result;
 	}
