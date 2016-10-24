@@ -3,6 +3,7 @@ package com.gmail.br45entei.data;
 import com.gmail.br45entei.main.Main;
 import com.gmail.br45entei.main.RemoteAdmin;
 import com.gmail.br45entei.swt.Functions;
+import com.gmail.br45entei.util.AddressUtil;
 import com.gmail.br45entei.util.StringUtil;
 
 import java.io.Closeable;
@@ -13,6 +14,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -62,6 +64,7 @@ public final class RemoteClient implements Closeable {
 	public final InputStream							in;
 	public final OutputStream							outStream;
 	public final PrintWriter							out;
+	private volatile String								type					= "";
 	private volatile String								username				= "";
 	
 	private final Thread								logSender;
@@ -78,6 +81,114 @@ public final class RemoteClient implements Closeable {
 	private static volatile String						serverTitle				= null;
 	private volatile boolean							sentServerIcon			= false;
 	private volatile boolean							sentServerTitle			= false;
+	
+	//==========================================
+	
+	public volatile RemoteClient						ftConnection			= null;
+	public volatile File								currentFTDir			= Main.getServerFolder();
+	
+	public volatile boolean								showPopupDialogs		= true;
+	
+	//==========================================
+	
+	public static final RemoteClient getFromFTConnection(RemoteClient ftConnection) {
+		if(ftConnection != null && ftConnection.type.equals("FILETRANSFER")) {
+			final String ipAddress = AddressUtil.getClientAddressNoPort(ftConnection.getIpAddress());
+			for(RemoteClient client : instances) {
+				if(client == ftConnection) {
+					continue;
+				}
+				String clientIp = AddressUtil.getClientAddressNoPort(client.getIpAddress());
+				if(client.type.equals("NORMAL") && client.username.equalsIgnoreCase(ftConnection.username) && ipAddress.equals(clientIp)) {
+					if(client.ftConnection != null) {
+						if(!client.ftConnection.isAlive()) {
+							try {
+								client.ftConnection.disconnect();
+							} catch(IOException ignored) {
+							}
+							client.ftConnection = null;
+						} else {
+							continue;
+						}
+					}
+					return client;
+				}
+			}
+		}
+		return null;
+	}
+	
+	public final boolean isAlive() {
+		this.out.println("");
+		return !this.out.checkError();
+	}
+	
+	public static final boolean isConnected(String username, String ipAddress) {
+		ipAddress = AddressUtil.getClientAddressNoPort(ipAddress);
+		for(RemoteClient client : instances) {
+			String clientIp = AddressUtil.getClientAddressNoPort(client.getIpAddress());
+			if(client.type.equals("NORMAL") && client.username.equalsIgnoreCase(username) && ipAddress.equals(clientIp)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public final void listFiles() throws IOException {
+		if(!this.type.equals("FILETRANSFER")) {
+			return;
+		}
+		File[] list = this.currentFTDir.listFiles();
+		ArrayList<File> folders = new ArrayList<>();
+		ArrayList<File> files = new ArrayList<>();
+		for(File file : list) {
+			if(file.isDirectory()) {
+				folders.add(file);
+			}
+			if(file.isFile()) {
+				files.add(file);
+			}
+		}
+		final boolean isHomeDir = this.currentFTDir.getAbsolutePath().equalsIgnoreCase(Main.getServerFolder().getAbsolutePath());
+		ArrayList<String> folderPaths = new ArrayList<>();
+		ArrayList<String> filePaths = new ArrayList<>();
+		for(File file : folders) {
+			if(!file.getName().equalsIgnoreCase("Users") || !isHomeDir) {
+				folderPaths.add(RemoteAdmin.getPathRelativeToServerFolder(file) + "?" + Functions.humanReadableByteCount(0, true, 2) + "?" + StringUtil.getCacheTime(file.lastModified()));
+			}
+		}
+		for(File file : files) {
+			if(!file.getName().equalsIgnoreCase("settings.txt") || !isHomeDir) {
+				URLConnection url = file.toURI().toURL().openConnection();
+				filePaths.add(RemoteAdmin.getPathRelativeToServerFolder(file) + "?" + Functions.humanReadableByteCount(url.getContentLengthLong(), true, 2) + "?" + StringUtil.getCacheTime(url.getLastModified()));
+				try {
+					url.getInputStream().close();
+					url.getOutputStream().close();
+				} catch(Throwable ignored) {
+				}
+			}
+		}
+		folderPaths.sort(String.CASE_INSENSITIVE_ORDER);
+		filePaths.sort(String.CASE_INSENSITIVE_ORDER);
+		final File parentDir = isHomeDir ? this.currentFTDir : this.currentFTDir.getParentFile();
+		this.println("LIST: " + (folderPaths.size() + filePaths.size() + (!isHomeDir ? 1 : 0)));
+		if(!isHomeDir) {
+			URLConnection url = parentDir.toURI().toURL().openConnection();
+			String parentDirPath = "../?" + Functions.humanReadableByteCount(0, true, 2) + "?" + StringUtil.getCacheTime(url.getLastModified());
+			try {
+				url.getInputStream().close();
+				url.getOutputStream().close();
+			} catch(Throwable ignored) {
+			}
+			this.println(parentDirPath);
+		}
+		for(String folderPath : folderPaths) {
+			this.println(folderPath);
+		}
+		for(String filePath : filePaths) {
+			this.println(filePath);
+		}
+	}
 	
 	public static final void setServerTitle(String title) {
 		if(!Main.sendServerInfoToClients || title == null) {
@@ -143,6 +254,11 @@ public final class RemoteClient implements Closeable {
 			this.addLog("WARN: " + log);
 		}
 		instances.add(this);
+	}
+	
+	public final RemoteClient setConnectionType(String type) {
+		this.type = type;
+		return this;
 	}
 	
 	public final String getUsername() {
@@ -284,17 +400,20 @@ public final class RemoteClient implements Closeable {
 	}
 	
 	public final boolean sendPopupMessage(String msg) {
-		try {
-			byte[] data = msg.getBytes(StandardCharsets.UTF_8);
-			this.out.println("MESSAGE: " + data.length);
-			this.out.flush();
-			this.outStream.write(data);
-			this.outStream.flush();
-			return true;
-		} catch(IOException e) {
-			e.printStackTrace();
-			return false;
+		if(this.showPopupDialogs) {
+			try {
+				byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+				this.out.println("MESSAGE: " + data.length);
+				this.out.flush();
+				this.outStream.write(data);
+				this.outStream.flush();
+				return true;
+			} catch(IOException e) {
+				e.printStackTrace();
+				return false;
+			}
 		}
+		return false;
 	}
 	
 	public final void disconnect() throws IOException {
@@ -310,6 +429,21 @@ public final class RemoteClient implements Closeable {
 	
 	@Override
 	public final void close() throws IOException {
+		if(this.type.equals("NORMAL")) {
+			try {
+				for(RemoteClient client : instances) {
+					if(client == this) {
+						continue;
+					}
+					if(client.type.equals("FILETRANSFER")) {
+						if(client.username.equalsIgnoreCase(this.username)) {
+							client.close();
+						}
+					}
+				}
+			} catch(Throwable ignored) {
+			}
+		}
 		instances.remove(this);
 		this.out.close();
 		this.in.close();

@@ -339,6 +339,29 @@ public final class Main {
 		createContents();
 		
 		loadSettings();
+		int index = -1;
+		int i = 0;
+		for(String arg : args) {
+			if(arg != null) {
+				if(arg.equalsIgnoreCase("-start")) {
+					index = i + 1;
+					break;
+				}
+			}
+			i++;
+		}
+		if(index != -1) {
+			String jarPath = StringUtil.stringArrayToString(args, ' ', index);
+			if(!jarPath.isEmpty()) {
+				File check = new File(jarPath);
+				if(check.isFile()) {
+					serverJar = check;
+					saveSettings();
+				} else {
+					System.err.println("Unable to resolve requested file path: " + jarPath);
+				}
+			}
+		}
 		serverListenPort.setSelection(RemoteAdmin.listenPort);
 		
 		savedCredentials.addAll(Credential.initialize(rootDir));
@@ -355,7 +378,9 @@ public final class Main {
 			openShell();
 		}
 		if((startServerImmediately || automaticServerStartup) && isServerJarSelected()) {//Automatic startup if jar file is loaded from config
+			automaticServerStartup = true;
 			launchServer(null);
+			saveSettings();
 		}
 		while(isRunning && !shell.isDisposed()) {
 			mainLoop();
@@ -516,6 +541,10 @@ public final class Main {
 		if(trayIcon != null) {
 			trayIcon.setImage(images[0]);
 		}
+	}
+	
+	public static final Image[] getShellImages() {
+		return shell.getImages();
 	}
 	
 	private static final void updateShellAppearance() {
@@ -702,7 +731,7 @@ public final class Main {
 	protected static final String			remAdminDisabled		= "Remote Administration is disabled. To allow clients to connect, please click the \"Enable\" button above.";
 	
 	public static final void stopServer(RemoteClient from, boolean rightNow) {
-		if(stoppingServer) {
+		if(stoppingServer && !rightNow) {
 			final String msg = "The server has already been told to shut down.\r\nGive it a second!";
 			if(from != null) {
 				from.println("WARN: " + msg);
@@ -1929,6 +1958,10 @@ public final class Main {
 	
 	public static final boolean isServerJarSelected() {
 		return serverJar != null && serverJar.exists();
+	}
+	
+	public static final File getServerFolder() {
+		return isServerJarSelected() ? Main.serverJar.getParentFile() : null;
 	}
 	
 	public static final boolean isProcessAlive() {

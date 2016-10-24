@@ -55,7 +55,7 @@ public class CredentialsManager extends Dialog {
 	
 	public static final class Credential {
 		
-		public static final Credential fullAccessUser = new Credential("", "", true, true);
+		public static final Credential fullAccessUser = new Credential("", "", new UserPermissions(true));
 		
 		private static final String getFileNameFor(String username) {
 			if(username != null) {
@@ -83,7 +83,7 @@ public class CredentialsManager extends Dialog {
 			for(String fileName : rootDir.list()) {
 				if(fileName.endsWith(".txt")) {
 					File file = new File(rootDir, fileName);
-					Credential load = loadFromFile(file);
+					Credential load = Credential.sLoadFromFile(file);
 					if(load != null) {
 						list.add(load);
 					}
@@ -92,20 +92,18 @@ public class CredentialsManager extends Dialog {
 			return list;
 		}
 		
-		public volatile String	username;
-		public volatile String	password;
+		public volatile String			username;
+		public volatile String			password;
 		
-		public volatile boolean	allowConsoleAccess;
-		public volatile boolean	canRestartServer;
+		public volatile UserPermissions	permissions;
 		
 		private Credential() {
 		}
 		
-		public Credential(String username, String password, boolean allowConsoleAccess, boolean canRestartServer) {
+		public Credential(String username, String password, UserPermissions permissions) {
 			this.username = username;
 			this.password = password;
-			this.allowConsoleAccess = allowConsoleAccess;
-			this.canRestartServer = canRestartServer;
+			this.permissions = permissions;
 		}
 		
 		private final File getSaveFile() {
@@ -117,8 +115,12 @@ public class CredentialsManager extends Dialog {
 			try(PrintWriter pr = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8), true)) {
 				pr.println("username=" + this.username);
 				pr.println("password=" + this.password);
-				pr.println("allowConsoleAccess=" + this.allowConsoleAccess);
-				pr.println("canRestartServer=" + this.canRestartServer);
+				pr.println("allowConsoleAccess=" + this.permissions.allowConsoleAccess);
+				pr.println("canRestartServer=" + this.permissions.canRestartServer);
+				pr.println("canStopServer=" + this.permissions.canStopServer);
+				pr.println("canModifyFiles=" + this.permissions.canModifyFiles);
+				pr.println("canDeleteFiles=" + this.permissions.canDeleteFiles);
+				pr.println("canDownloadFiles=" + this.permissions.canDownloadFiles);
 				pr.println("");
 				pr.flush();
 			} catch(Throwable e) {
@@ -128,37 +130,21 @@ public class CredentialsManager extends Dialog {
 			return true;
 		}
 		
-		public static final Credential loadFromFile(File file) {
+		public static final Credential sLoadFromFile(File file) {
 			if(file == null || !file.exists()) {
 				return null;
 			}
 			Credential user = new Credential();
-			try(BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-				final String regex = Pattern.quote("=");
-				while(br.ready()) {
-					String line = br.readLine();
-					String[] split = line.split(regex);
-					String param = split[0];
-					String value = StringUtil.stringArrayToString(split, '=', 1);
-					if(param.equalsIgnoreCase("username")) {
-						user.username = value;
-					} else if(param.equalsIgnoreCase("password")) {
-						user.password = value;
-					} else if(param.equalsIgnoreCase("allowConsoleAccess")) {
-						user.allowConsoleAccess = value.equalsIgnoreCase("true");
-					} else if(param.equalsIgnoreCase("canRestartServer")) {
-						user.canRestartServer = value.equalsIgnoreCase("true");
-					}
-				}
-			} catch(Throwable e) {
-				e.printStackTrace();
-				return null;
-			}
+			user.permissions = new UserPermissions();
+			user.loadFromFile(file);
 			return user;
 		}
 		
 		public final boolean loadFromFile() {
-			File file = this.getSaveFile();
+			return this.loadFromFile(this.getSaveFile());
+		}
+		
+		public final boolean loadFromFile(File file) {
 			if(!file.exists()) {
 				return false;
 			}
@@ -169,14 +155,23 @@ public class CredentialsManager extends Dialog {
 					String[] split = line.split(regex);
 					String param = split[0];
 					String value = StringUtil.stringArrayToString(split, '=', 1);
+					final boolean boolVal = value.equalsIgnoreCase("true");
 					if(param.equalsIgnoreCase("username")) {
 						this.username = value;
 					} else if(param.equalsIgnoreCase("password")) {
 						this.password = value;
 					} else if(param.equalsIgnoreCase("allowConsoleAccess")) {
-						this.allowConsoleAccess = value.equalsIgnoreCase("true");
+						this.permissions.allowConsoleAccess = boolVal;
 					} else if(param.equalsIgnoreCase("canRestartServer")) {
-						this.canRestartServer = value.equalsIgnoreCase("true");
+						this.permissions.canRestartServer = boolVal;
+					} else if(param.equalsIgnoreCase("canStopServer")) {
+						this.permissions.canStopServer = boolVal;
+					} else if(param.equalsIgnoreCase("canModifyFiles")) {
+						this.permissions.canModifyFiles = boolVal;
+					} else if(param.equalsIgnoreCase("canDeleteFiles")) {
+						this.permissions.canDeleteFiles = boolVal;
+					} else if(param.equalsIgnoreCase("canDownloadFiles")) {
+						this.permissions.canDownloadFiles = boolVal;
 					}
 				}
 			} catch(Throwable e) {
@@ -318,8 +313,9 @@ public class CredentialsManager extends Dialog {
 				cred.password.setText(user.password);
 				cred.password.selectAll();
 			}
-			user.allowConsoleAccess = cred.btnAllowConsoleAccess.getSelection();
-			user.canRestartServer = cred.btnCanRestartServer.getSelection();
+			/*user.permissions.allowConsoleAccess = cred.permissions.allowConsoleAccess;
+			user.permissions.canRestartServer = cred.permissions.canRestartServer;
+			user.permissions.canModifyFiles = cred.permissions.canModifyFiles;*/
 			i++;
 		}
 		for(Control control : this.content.getChildren()) {
@@ -343,6 +339,33 @@ public class CredentialsManager extends Dialog {
 		}
 	}
 	
+	public static final class UserPermissions {
+		public volatile boolean	allowConsoleAccess;
+		public volatile boolean	canRestartServer;
+		public volatile boolean	canStopServer;
+		public volatile boolean	canModifyFiles;
+		public volatile boolean	canDeleteFiles;
+		public volatile boolean	canDownloadFiles;
+		
+		public UserPermissions() {
+			this(false);
+		}
+		
+		public UserPermissions(boolean allPerms) {
+			this(allPerms, allPerms, allPerms, allPerms, allPerms, allPerms);
+		}
+		
+		public UserPermissions(boolean allowConsoleAccess, boolean canRestartServer, boolean canStopServer, boolean canModifyFiles, boolean canDeleteFiles, boolean canDownloadFiles) {
+			this.allowConsoleAccess = allowConsoleAccess;
+			this.canRestartServer = canRestartServer;
+			this.canStopServer = canStopServer;
+			this.canModifyFiles = canModifyFiles;
+			this.canDeleteFiles = canDeleteFiles;
+			this.canDownloadFiles = canDownloadFiles;
+		}
+		
+	}
+	
 	public static final class CreateNewCredentialComposite extends Composite {
 		
 		public final CredentialsManager	manager;
@@ -352,14 +375,16 @@ public class CredentialsManager extends Dialog {
 		public final Button				btnCreate;
 		public final Text				username;
 		public final Text				password;
-		public final Button				btnAllowConsoleAccess;
-		public final Button				btnCanRestartServer;
+		public final Button				btnEditPermissions;
+		
+		public volatile UserPermissions	permissions;
 		
 		/** @param parent
 		 * @param style */
 		public CreateNewCredentialComposite(Composite parent, CredentialsManager manager) {
 			super(parent, SWT.NORMAL);
 			this.manager = manager;
+			this.permissions = new UserPermissions(false);
 			this.setSize(450, CredentialComposite.ySize);
 			
 			this.lblUsername = new Label(this, SWT.NONE);
@@ -381,12 +406,11 @@ public class CredentialsManager extends Dialog {
 					if(username != null && !username.trim().isEmpty() && pswd != null && !pswd.trim().isEmpty()) {
 						username = username.trim();
 						if(manager.getUser(username) == null) {
-							Credential user = new Credential(username, pswd, CreateNewCredentialComposite.this.btnAllowConsoleAccess.getSelection(), CreateNewCredentialComposite.this.btnCanRestartServer.getSelection());
+							Credential user = new Credential(username, pswd, CreateNewCredentialComposite.this.permissions);
 							manager.credentials.add(user);
 							CreateNewCredentialComposite.this.username.setText("");
 							CreateNewCredentialComposite.this.password.setText("");
-							CreateNewCredentialComposite.this.btnAllowConsoleAccess.setSelection(true);
-							CreateNewCredentialComposite.this.btnCanRestartServer.setSelection(true);
+							CreateNewCredentialComposite.this.permissions = new UserPermissions(false);
 						}
 					}
 				}
@@ -398,15 +422,15 @@ public class CredentialsManager extends Dialog {
 			this.password = new Text(this, SWT.BORDER | SWT.PASSWORD);
 			this.password.setBounds(84, 36, 140, 21);
 			
-			this.btnAllowConsoleAccess = new Button(this, SWT.CHECK);
-			this.btnAllowConsoleAccess.setBounds(241, 10, 125, 16);
-			this.btnAllowConsoleAccess.setText("Allow Console Access");
-			this.btnAllowConsoleAccess.setSelection(true);
-			
-			this.btnCanRestartServer = new Button(this, SWT.CHECK);
-			this.btnCanRestartServer.setBounds(241, 37, 125, 16);
-			this.btnCanRestartServer.setText("Can Restart Server");
-			this.btnCanRestartServer.setSelection(true);
+			this.btnEditPermissions = new Button(this, SWT.NONE);
+			this.btnEditPermissions.addSelectionListener(new SelectionAdapter() {
+				@Override
+				public void widgetSelected(SelectionEvent e) {
+					new EditUserPermissionsDialog(manager.shell, CreateNewCredentialComposite.this.permissions).open();
+				}
+			});
+			this.btnEditPermissions.setBounds(241, 10, 125, 44);
+			this.btnEditPermissions.setText("Edit Permissions");
 			
 			Label label = new Label(this, SWT.SEPARATOR | SWT.VERTICAL);
 			label.setLocation(230, 10);
@@ -431,8 +455,9 @@ public class CredentialsManager extends Dialog {
 		public final Button				btnDelete;
 		public final Text				username;
 		public final Text				password;
-		public final Button				btnAllowConsoleAccess;
-		public final Button				btnCanRestartServer;
+		public final Button				btnEditPermissions;
+		
+		public final UserPermissions	permissions;
 		
 		/** @param parent
 		 * @param style */
@@ -442,6 +467,7 @@ public class CredentialsManager extends Dialog {
 			this.setSize(450, ySize);
 			
 			this.user = user;
+			this.permissions = user.permissions;
 			
 			this.lblUsername = new Label(this, SWT.NONE);
 			this.lblUsername.setBounds(10, 10, 68, 15);
@@ -480,15 +506,16 @@ public class CredentialsManager extends Dialog {
 			label.setLocation(230, 10);
 			label.setSize(2, 44);
 			
-			this.btnAllowConsoleAccess = new Button(this, SWT.CHECK);
-			this.btnAllowConsoleAccess.setBounds(241, 10, 125, 16);
-			this.btnAllowConsoleAccess.setText("Allow Console Access");
-			this.btnAllowConsoleAccess.setSelection(user.allowConsoleAccess);
+			this.btnEditPermissions = new Button(this, SWT.NONE);
+			this.btnEditPermissions.addSelectionListener(new SelectionAdapter() {
+				@Override
+				public void widgetSelected(SelectionEvent e) {
+					new EditUserPermissionsDialog(manager.shell, CredentialComposite.this.permissions).open();
+				}
+			});
+			this.btnEditPermissions.setBounds(241, 10, 125, 44);
+			this.btnEditPermissions.setText("Edit Permissions");
 			
-			this.btnCanRestartServer = new Button(this, SWT.CHECK);
-			this.btnCanRestartServer.setBounds(241, 37, 125, 16);
-			this.btnCanRestartServer.setText("Can Restart Server");
-			this.btnCanRestartServer.setSelection(user.canRestartServer);
 		}
 		
 	}
