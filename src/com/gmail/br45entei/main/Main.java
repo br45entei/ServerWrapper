@@ -364,7 +364,10 @@ public final class Main {
 		}
 		serverListenPort.setSelection(RemoteAdmin.listenPort);
 		
-		savedCredentials.addAll(Credential.initialize(rootDir));
+		ArrayList<Credential> credentials = Credential.initialize(rootDir);
+		if(credentials != null) {
+			savedCredentials.addAll(credentials);
+		}
 		RemoteAdmin.setupListenSocket();
 		outTxtUpdateThread.start();
 		errTxtUpdateThread.start();

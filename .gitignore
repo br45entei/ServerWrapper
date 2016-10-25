@@ -49,3 +49,4 @@ wrkDir
 Export_to_Export.jardesc
 MANIFEST.MF
 TODO.txt
+src/SWTFileViewerDemo.java

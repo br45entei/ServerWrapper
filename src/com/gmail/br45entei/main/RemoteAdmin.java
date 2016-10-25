@@ -622,9 +622,9 @@ public class RemoteAdmin {
 				}
 				if(line.toUpperCase().startsWith("COMMAND: ")) {
 					if(user.permissions.allowConsoleAccess || !Main.isProcessAlive()) {
-						String command = line.substring("COMMAND:".length());
-						command = command.startsWith(" ") ? command.substring(1) : command;
-						if(command.toLowerCase().split(Pattern.quote(" "))[0].startsWith("stop") || command.toLowerCase().split(Pattern.quote(" "))[0].startsWith("restart")) {
+						String command = line.substring("COMMAND: ".length());
+						String[] args = command.toLowerCase().split(Pattern.quote(" "));
+						if(args.length > 0 && (args[0].startsWith("stop") || args[0].startsWith("restart"))) {
 							if(user.permissions.canRestartServer) {
 								try {
 									Main.handleInput(client, command);
@@ -632,6 +632,13 @@ public class RemoteAdmin {
 									client.println("COMMAND_ERROR: " + Functions.throwableToStr(e));
 									client.println("COMMAND_ERROR_END");
 								}
+							}
+						} else {//Derp, I left this out:
+							try {
+								Main.handleInput(client, command);
+							} catch(Throwable e) {
+								client.println("COMMAND_ERROR: " + Functions.throwableToStr(e));
+								client.println("COMMAND_ERROR_END");
 							}
 						}
 					} else {
