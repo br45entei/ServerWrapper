@@ -1739,7 +1739,7 @@ public final class Main {
 			}
 		});
 		btnUseG1GC.setBounds(267, 45, 103, 25);
-		btnUseG1GC.setText("Use Java GCG1");
+		btnUseG1GC.setText("Use Java G1GC");
 		
 		Label lblProgramArgs = new Label(shell, SWT.NONE);
 		lblProgramArgs.setBounds(10, 76, 79, 25);

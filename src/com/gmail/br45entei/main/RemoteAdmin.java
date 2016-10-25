@@ -557,24 +557,24 @@ public class RemoteAdmin {
 			if(newFolderName.isEmpty() || newFolderName.equals("null")) {
 				return continueData;
 			}
-			if(StringUtil.isFileSystemSafe(newFolderName)) {
-				File parent = client.currentFTDir;
-				File check = new File(parent, newFolderName);
-				if(check.exists()) {
-					client.ftConnection.currentFTDir = check;
-					client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
-					return continueData;
-				}
-				if(!check.mkdirs()) {
-					client.sendPopupMessage("An unknown error occurred when creating the new folder \"" + check.getName() + "\".\r\nPlease try again.");
-				} else {
-					Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + newFolderName + "\";");
-					client.ftConnection.currentFTDir = check;
-					client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
-				}
-			} else {
-				client.sendPopupMessage("The file name \"" + newFolderName + "\" is not filesystem safe.\r\nPlease remove any invalid characters and try again.");
+			//if(StringUtil.isFileSystemSafe(newFolderName)) {
+			File parent = client.currentFTDir;
+			File check = new File(parent + File.separator + newFolderName.replace("/", File.separator));
+			if(check.exists()) {
+				client.ftConnection.currentFTDir = check;
+				client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
+				return continueData;
 			}
+			if(!check.mkdirs()) {
+				client.sendPopupMessage("An unknown error occurred when creating the new folder \"" + check.getName() + "\".\r\nPlease try again.");
+			} else {
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + newFolderName + "\";");
+				client.ftConnection.currentFTDir = check;
+				client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
+			}
+			//} else {
+			//	client.sendPopupMessage("The file name \"" + newFolderName + "\" is not filesystem safe.\r\nPlease remove any invalid characters and try again.");
+			//}
 		} else if(line.startsWith("GETDIR: ")) {
 			if(!user.permissions.canDownloadFiles) {
 				client.sendPopupMessage("You do not have permission to download server files.");

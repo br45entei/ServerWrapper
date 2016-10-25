@@ -160,7 +160,7 @@ public final class RemoteClient implements Closeable {
 		for(File file : files) {
 			if(!file.getName().equalsIgnoreCase("settings.txt") || !isHomeDir) {
 				URLConnection url = file.toURI().toURL().openConnection();
-				filePaths.add(RemoteAdmin.getPathRelativeToServerFolder(file) + "?" + Functions.humanReadableByteCount(url.getContentLengthLong(), true, 2) + "?" + StringUtil.getCacheTime(url.getLastModified()));
+				filePaths.add(RemoteAdmin.getPathRelativeToServerFolder(file) + "?" + Functions.humanReadableByteCount(url.getContentLengthLong(), true, 6) + "?" + StringUtil.getCacheTime(url.getLastModified()));
 				try {
 					url.getInputStream().close();
 					url.getOutputStream().close();
@@ -169,7 +169,7 @@ public final class RemoteClient implements Closeable {
 			}
 		}
 		folderPaths.sort(String.CASE_INSENSITIVE_ORDER);
-		filePaths.sort(String.CASE_INSENSITIVE_ORDER);
+		//filePaths.sort(String.CASE_INSENSITIVE_ORDER);
 		final File parentDir = isHomeDir ? this.currentFTDir : this.currentFTDir.getParentFile();
 		this.println("LIST: " + (folderPaths.size() + filePaths.size() + (!isHomeDir ? 1 : 0)));
 		if(!isHomeDir) {
