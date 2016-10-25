@@ -206,7 +206,7 @@ public class CredentialsManager extends Dialog {
 	public ArrayList<Credential> open() {
 		ArrayList<Credential> list = null;
 		createContents();
-		if(!Main.headless) {
+		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
 			this.display = getParent().getDisplay();

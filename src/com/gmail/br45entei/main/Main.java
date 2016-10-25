@@ -72,8 +72,13 @@ import org.eclipse.wb.swt.SWTResourceManager;
 @SuppressWarnings("javadoc")
 public final class Main {
 	
-	public static final boolean								headless				= GraphicsEnvironment.isHeadless();
+	private static final boolean	headless	= GraphicsEnvironment.isHeadless();
 	// Would use https://www.x.org/archive/X11R6.8.2/doc/Xvfb.1.html , but not opening shell works too... XD
+	private static volatile boolean	actHeadless	= false;
+	
+	public static final boolean isHeadless() {
+		return headless || actHeadless;
+	}
 	
 	public static final Charset								stringCharset			= StandardCharsets.UTF_8;
 	
@@ -285,7 +290,7 @@ public final class Main {
 	//===========================
 	
 	public static final boolean doUseG1GC() {
-		return useG1GC;
+		return Main.useG1GC;
 	}
 	
 	public static final Credential getCredentialsFor(String username, String password) {
@@ -298,7 +303,7 @@ public final class Main {
 	}
 	
 	public static final boolean isRunning() {
-		return isRunning;
+		return Main.isRunning;
 	}
 	
 	public static final String getDefaultShellTitle() {
@@ -315,19 +320,20 @@ public final class Main {
 	public static final void main(String[] args) {
 		JavaProgramArguments.initializeFromMainClass(Main.class, args);
 		JavaProgramArguments arguments = JavaProgramArguments.getArguments();
-		javaHome = arguments.javaHome;
-		javaExecutable = arguments.javaExecutable;
-		startServerImmediately = StringUtil.containsIgnoreCase(arguments.arguments, "startServer") || StringUtil.containsIgnoreCase(arguments.arguments, "runServer");
-		startHiddenInTray = StringUtil.containsIgnoreCase(arguments.arguments, "trayOnly") || StringUtil.containsIgnoreCase(arguments.arguments, "silent") || StringUtil.containsIgnoreCase(arguments.arguments, "hidden");
-		swtThread = Thread.currentThread();
+		Main.javaHome = arguments.javaHome;
+		Main.javaExecutable = arguments.javaExecutable;
+		Main.startServerImmediately = StringUtil.containsIgnoreCase(arguments.arguments, "startServer") || StringUtil.containsIgnoreCase(arguments.arguments, "runServer");
+		Main.startHiddenInTray = StringUtil.containsIgnoreCase(arguments.arguments, "trayOnly") || StringUtil.containsIgnoreCase(arguments.arguments, "silent") || StringUtil.containsIgnoreCase(arguments.arguments, "hidden");
+		Main.actHeadless = StringUtil.containsIgnoreCase(arguments.arguments, "-headless") || StringUtil.containsIgnoreCase(arguments.arguments, "headless");
+		Main.swtThread = Thread.currentThread();
 		
-		display = Display.getDefault();
-		shell = new Shell(display, SWT.SHELL_TRIM | SWT.APPLICATION_MODAL);
+		Main.display = Display.getDefault();
+		shell = new Shell(Main.display, SWT.SHELL_TRIM | SWT.APPLICATION_MODAL);
 		shell.addShellListener(new ShellAdapter() {
 			@Override
 			public void shellClosed(ShellEvent e) {
 				e.doit = false;
-				shutdown();
+				Main.shutdown();
 			}
 		});
 		shell.setSize(904, 592);
@@ -336,9 +342,9 @@ public final class Main {
 		shell.setImages(getDefaultImages());
 		Functions.centerShellOnPrimaryMonitor(shell);
 		
-		createContents();
+		Main.createContents();
 		
-		loadSettings();
+		Main.loadSettings();
 		int index = -1;
 		int i = 0;
 		for(String arg : args) {
@@ -355,14 +361,14 @@ public final class Main {
 			if(!jarPath.isEmpty()) {
 				File check = new File(jarPath);
 				if(check.isFile()) {
-					serverJar = check;
-					saveSettings();
+					Main.serverJar = check;
+					Main.saveSettings();
 				} else {
 					System.err.println("Unable to resolve requested file path: " + jarPath);
 				}
 			}
 		}
-		serverListenPort.setSelection(RemoteAdmin.listenPort);
+		Main.serverListenPort.setSelection(RemoteAdmin.listenPort);
 		
 		ArrayList<Credential> credentials = Credential.initialize(rootDir);
 		if(credentials != null) {
@@ -372,41 +378,41 @@ public final class Main {
 		outTxtUpdateThread.start();
 		errTxtUpdateThread.start();
 		
-		isRunning = true;
-		startRemoteAdmin();
+		Main.isRunning = true;
+		Main.startRemoteAdmin();
 		
-		if(trayIcon != null && startHiddenInTray) {
-			hideShell(true);
+		if(Main.trayIcon != null && Main.startHiddenInTray) {
+			Main.hideShell(true);
 		} else {
-			openShell();
+			Main.openShell();
 		}
-		if((startServerImmediately || automaticServerStartup) && isServerJarSelected()) {//Automatic startup if jar file is loaded from config
-			automaticServerStartup = true;
-			launchServer(null);
-			saveSettings();
+		if((Main.startServerImmediately || Main.automaticServerStartup) && Main.isServerJarSelected()) {//Automatic startup if jar file is loaded from config
+			Main.automaticServerStartup = true;
+			Main.launchServer(null);
+			Main.saveSettings();
 		}
-		while(isRunning && !shell.isDisposed()) {
-			mainLoop();
+		while(Main.isRunning && !Main.shell.isDisposed()) {
+			Main.mainLoop();
 		}
-		appendLog("ServerWraper shutting down; please wait...");
+		Main.appendLog("ServerWraper shutting down; please wait...");
 		if(process != null && process.process.isAlive()) {
-			serverStoppedByUser = true;
-			handleInput(null, "save-all\nstop");//process.process.destroyForcibly();
-			isRunning = true;//kek
-			openShell();
+			Main.serverStoppedByUser = true;
+			Main.handleInput(null, "save-all\nstop");//process.process.destroyForcibly();
+			Main.isRunning = true;//kek
+			Main.openShell();
 			final long startTime = System.currentTimeMillis();
 			final long waitTime = 15000L;
 			long lastSecond = startTime;
 			int secondsWaited = 15;
-			appendLog("Waiting " + secondsWaited + " seconds for server to shutdown:");
+			Main.appendLog("Waiting " + secondsWaited + " seconds for server to shutdown:");
 			while(process != null && process.process.isAlive()) {
-				mainLoop();
+				Main.mainLoop();
 				final long now = System.currentTimeMillis();
 				long elapsedTime = now - startTime;
 				long elapsedSecondTime = now - lastSecond;
 				if(elapsedSecondTime >= 1000L) {
 					lastSecond = now;
-					appendLog("\t" + --secondsWaited + " seconds remaining");
+					Main.appendLog("\t" + --secondsWaited + " seconds remaining");
 				}
 				if(elapsedTime > waitTime) {
 					if(process != null) {
@@ -415,23 +421,21 @@ public final class Main {
 					break;
 				}
 			}
-			isRunning = false;//un-kek
+			Main.isRunning = false;//un-kek
 		}
-		saveSettings();
-		display.dispose();
+		Main.saveSettings();
+		Main.display.dispose();
 		for(Credential user : savedCredentials) {
 			user.saveToFile();
 		}
 		System.exit(0);
 	}
 	
-	private static volatile boolean checkVMArgsForXms = false;
-	
 	private static final String getXmsFromXmxForG1GC() {
 		String rtrn = "";
-		if(btnUseG1GC.getSelection()) {
-			if(txtVmArgs.getText().contains("-Xmx")) {
-				String[] split = txtVmArgs.getText().split(Pattern.quote(" "));
+		if(Main.btnUseG1GC.getSelection()) {
+			if(Main.txtVmArgs.getText().contains("-Xmx")) {
+				String[] split = Main.txtVmArgs.getText().split(Pattern.quote(" "));
 				for(String arg : split) {
 					if(arg.startsWith("-Xmx")) {
 						rtrn = arg.replace("-Xmx", "-Xms");
@@ -443,16 +447,18 @@ public final class Main {
 		return rtrn;
 	}
 	
+	private static volatile boolean checkVMArgsForXms = false;
+	
 	protected static final void checkVMArgsForXms() {
-		if(!checkThreadAccess()) {
-			checkVMArgsForXms = true;
+		if(!Main.checkThreadAccess()) {
+			Main.checkVMArgsForXms = true;
 			return;
 		}
-		checkVMArgsForXms = false;
-		if(btnUseG1GC.getSelection()) {
-			if(txtVmArgs.getText().contains("-Xms")) {
+		Main.checkVMArgsForXms = false;
+		if(Main.btnUseG1GC.getSelection()) {
+			if(Main.txtVmArgs.getText().contains("-Xms")) {
 				String newArgs = "";
-				String[] split = txtVmArgs.getText().split(Pattern.quote(" "));
+				String[] split = Main.txtVmArgs.getText().split(Pattern.quote(" "));
 				int index = 0;
 				for(String arg : split) {
 					if(!arg.startsWith("-Xms")) {
@@ -460,21 +466,21 @@ public final class Main {
 					}
 					index++;
 				}
-				if(!txtVmArgs.getText().equals(newArgs)) {
-					txtVmArgs.setText(newArgs);
-					appendLog("==Java's -Xms vm option should be the same as the -Xmx option when using the G1 Garbage Collector.\nTherefore, it will be handled automatically.");
+				if(!Main.txtVmArgs.getText().equals(newArgs)) {
+					Main.txtVmArgs.setText(newArgs);
+					Main.appendLog("==Java's -Xms vm option should be the same as the -Xmx option when using the G1 Garbage Collector.\nTherefore, it will be handled automatically.");
 				}
 			}
 		}
 	}
 	
 	private static final void setShellTitle() {
-		final String defaultTitle = getDefaultShellTitle();
+		final String defaultTitle = Main.getDefaultShellTitle();
 		String text = defaultTitle;
-		if(isServerJarSelected() && isProcessAlive()) {
+		if(Main.isServerJarSelected() && Main.isProcessAlive()) {
 			System.out.println("Wrapper root dir: " + rootDir.getAbsolutePath());
-			System.out.println("Selected server jar: " + serverJar.getAbsolutePath());
-			File serverFolder = serverJar.getParentFile();
+			System.out.println("Selected server jar: " + Main.serverJar.getAbsolutePath());
+			File serverFolder = Main.serverJar.getParentFile();
 			if(serverFolder.isDirectory()) {
 				System.out.println("Resulting server folder: " + serverFolder.getAbsolutePath());
 				File serverProperties = new File(serverFolder, "server.properties");
@@ -515,13 +521,13 @@ public final class Main {
 		} else {
 			RemoteClient.setServerTitle(null);
 		}
-		Functions.setTextFor(shell, text);
+		Functions.setTextFor(Main.shell, text);
 	}
 	
 	private static final void setShellIcon() {
-		Image[] images = getDefaultImages();
-		if(isServerJarSelected() && isProcessAlive()) {
-			File serverFolder = serverJar.getParentFile();
+		Image[] images = Main.getDefaultImages();
+		if(Main.isServerJarSelected() && Main.isProcessAlive()) {
+			File serverFolder = Main.serverJar.getParentFile();
 			if(serverFolder.isDirectory()) {//i.e. if it exists and is a directory
 				File serverIcon = new File(serverFolder, "server-icon.png");
 				if(!serverIcon.exists()) {
@@ -541,68 +547,68 @@ public final class Main {
 			RemoteClient.setServerIconFile(null);
 		}
 		Functions.setShellImages(shell, images);
-		if(trayIcon != null) {
-			trayIcon.setImage(images[0]);
+		if(Main.trayIcon != null) {
+			Main.trayIcon.setImage(images[0]);
 		}
 	}
 	
 	public static final Image[] getShellImages() {
-		return shell.getImages();
+		return Main.shell.getImages();
 	}
 	
 	private static final void updateShellAppearance() {
-		if(!checkThreadAccess()) {
-			updateShellAppearance = true;
+		if(!Main.checkThreadAccess()) {
+			Main.updateShellAppearance = true;
 			return;
 		}
-		updateShellAppearance = false;
-		setShellTitle();
-		setShellIcon();
-		if(!isProcessAlive()) {
+		Main.updateShellAppearance = false;
+		Main.setShellTitle();
+		Main.setShellIcon();
+		if(!Main.isProcessAlive()) {
 			RemoteClient.setServerIconFile(null);
 		}
 	}
 	
 	public static final void launchServer(RemoteClient from) {
-		if(isProcessAlive() || !isServerJarSelected()) {
-			startServer = false;//Prevents potential loops/stackoverflows
+		if(Main.isProcessAlive() || !Main.isServerJarSelected()) {
+			Main.startServer = false;//Prevents potential loops/stackoverflows
 			return;
 		}
-		if(!checkThreadAccess()) {
-			startServer = true;
-			startServerClient = from;
+		if(!Main.checkThreadAccess()) {
+			Main.startServer = true;
+			Main.startServerClient = from;
 			return;
 		}
-		stoppingServer = false;//Fix for 'stoppingServer' variable becoming stuck to true, causing the stop and restart buttons to stop working indefinitely...
-		if(startServer && from == null) {
-			from = startServerClient;
+		Main.stoppingServer = false;//Fix for 'stoppingServer' variable becoming stuck to true, causing the stop and restart buttons to stop working indefinitely...
+		if(Main.startServer && from == null) {
+			from = Main.startServerClient;
 		}
-		startServerClient = null;
-		isProcessBeingStarted = true;
+		Main.startServerClient = null;
+		Main.isProcessBeingStarted = true;
 		try {
-			serverStoppedByUser = false;
-			hasProcessDied = false;
-			processExitCode = 0;
+			Main.serverStoppedByUser = false;
+			Main.hasProcessDied = false;
+			Main.processExitCode = 0;
 			Main.out.dispose();
 			Main.err.dispose();
 			//RemoteClient.resetClientLogs();
 			//appendLog("==\r\n");//wrapperLog.setText("");
-			final String jarPath = serverJar.getAbsolutePath();
+			final String jarPath = Main.serverJar.getAbsolutePath();
 			final String jarCmdLine = " -jar " + (jarPath.contains(" ") ? "\"" + jarPath + "\"" : jarPath).trim();
-			final String vmArgsCmdLine = (txtVmArgs.getText().trim().isEmpty() ? "" : " " + txtVmArgs.getText().trim()) + (useG1GC ? " " + getXmsFromXmxForG1GC() + " " + G1GC_VM_ARGS : "");
-			final String progArgsCmdLine = txtProgramArgs.getText().trim().isEmpty() ? "" : " " + txtProgramArgs.getText().trim();
-			final String command = "\"" + javaExecutable + "\"" + vmArgsCmdLine + jarCmdLine + progArgsCmdLine + (progArgsCmdLine.isEmpty() ? " nogui" : (!progArgsCmdLine.contains("nogui") ? " nogui" : ""));
+			final String vmArgsCmdLine = (Main.txtVmArgs.getText().trim().isEmpty() ? "" : " " + Main.txtVmArgs.getText().trim()) + (Main.useG1GC ? " " + Main.getXmsFromXmxForG1GC() + " " + G1GC_VM_ARGS : "");
+			final String progArgsCmdLine = Main.txtProgramArgs.getText().trim().isEmpty() ? "" : " " + Main.txtProgramArgs.getText().trim();
+			final String command = "\"" + Main.javaExecutable + "\"" + vmArgsCmdLine + jarCmdLine + progArgsCmdLine + (progArgsCmdLine.isEmpty() ? " nogui" : (!progArgsCmdLine.contains("nogui") ? " nogui" : ""));
 			final Runnable[] runnables = new Runnable[] {new Runnable() {
 				@Override
 				public final void run() {
 					final ProcessIO THIS = process;
 					//byte[] buf = new byte[4096];
 					//int read;
-					while(THIS.process.isAlive()) {
+					while(THIS.process != null && THIS.process.isAlive()) {
 						try {
 							String line = StringUtil.readLine(THIS.out);
 							if(line != null) {
-								addLogToConsole(line);
+								Main.addLogToConsole(line);
 							}
 							/*read = THIS.out.read(buf);
 							if(read != -1) {
@@ -623,7 +629,7 @@ public final class Main {
 					final ProcessIO THIS = process;
 					//byte[] buf = new byte[4096];
 					//int read;
-					while(THIS.process.isAlive()) {
+					while(THIS.process != null && THIS.process.isAlive()) {
 						try {
 							String line = StringUtil.readLine(THIS.err);
 							if(line != null) {
@@ -645,8 +651,8 @@ public final class Main {
 			}};
 			Thread[] threads = new Thread[0];
 			try {
-				process = new ProcessIO("\"" + javaExecutable + "\"", vmArgsCmdLine + jarCmdLine, progArgsCmdLine + (progArgsCmdLine.isEmpty() ? " nogui" : (!progArgsCmdLine.contains("nogui") ? " nogui" : "")), serverJar.getParentFile());
-				appendLog("==Launch command:\r\n\t" + process.cmdLine);
+				process = new ProcessIO("\"" + Main.javaExecutable + "\"", vmArgsCmdLine + jarCmdLine, progArgsCmdLine + (progArgsCmdLine.isEmpty() ? " nogui" : (!progArgsCmdLine.contains("nogui") ? " nogui" : "")), Main.serverJar.getParentFile());
+				Main.appendLog("==Launch command:\r\n\t" + process.cmdLine);
 				threads = process.startThreads(runnables[0], runnables[1]);
 			} catch(Throwable e) {
 				if(process != null && process.process != null) {
@@ -655,26 +661,26 @@ public final class Main {
 					threads = new Thread[0];
 				}
 				if(e.getMessage() != null && e.getMessage().startsWith("Failed to retrieve RMIServer stub: ")) {//Failed to retrieve RMIServer stub: javax.naming.ServiceUnavailableException [Root exception is java.rmi.ConnectException: Connection refused to host: 127.0.0.1; nested exception is:
-					if(javaExecutable.replace("\\", "/").contains("/jdk")) {
-						new JDKWarningDialog(shell).open();
-					} else if(btnUseG1GC.getSelection()) {
-						appendLog("==Launch failed; re-attempting launch without G1 garbage collector enabled...\r\n");
-						btnUseG1GC.setSelection(false);
-						useG1GC = false;
-						startServer = false;
-						launchServer(from);//Try again without G1GC
-						isProcessBeingStarted = false;
+					if(Main.javaExecutable.replace("\\", "/").contains("/jdk")) {
+						new JDKWarningDialog(Main.shell).open();
+					} else if(Main.btnUseG1GC.getSelection()) {
+						Main.appendLog("==Launch failed; re-attempting launch without G1 garbage collector enabled...\r\n");
+						Main.btnUseG1GC.setSelection(false);
+						Main.useG1GC = false;
+						Main.startServer = false;
+						Main.launchServer(from);//Try again without G1GC
+						Main.isProcessBeingStarted = false;
 						return;
 					} else {
-						appendLog("==" + Functions.throwableToStr(e));
-						appendLog("==Launch failed; attempting launch without memory monitoring features enabled...\r\n");
-						appendLog("==Launch command:\r\n\t" + command);
+						Main.appendLog("==" + Functions.throwableToStr(e));
+						Main.appendLog("==Launch failed; attempting launch without memory monitoring features enabled...\r\n");
+						Main.appendLog("==Launch command:\r\n\t" + command);
 						ProcessBuilder builder = new ProcessBuilder(command.split(Pattern.quote(" ")));
 						builder.redirectOutput(Redirect.PIPE);
 						builder.redirectError(Redirect.PIPE);
 						builder.redirectInput(Redirect.PIPE);
-						builder.directory(serverJar.getParentFile());
-						appendLog("Starting server; please wait...");
+						builder.directory(Main.serverJar.getParentFile());
+						Main.appendLog("Starting server; please wait...");
 						process = new ProcessIO(builder);
 						threads = process.startThreads(runnables[0], runnables[1]);
 					}
@@ -682,25 +688,25 @@ public final class Main {
 					throw e;
 				}
 			}
-			updateShellAppearance();
+			Main.updateShellAppearance();
 			if(threads.length == 2) {
-				appendLog("Server told to start successfully.");
+				Main.appendLog("Server told to start successfully.");
 			} else {
-				appendLog("Failed to start server: Unable to verify server process started successfully!");
-				startServer = false;
-				stopServer(null, false);
+				Main.appendLog("Failed to start server: Unable to verify server process started successfully!");
+				Main.startServer = false;
+				Main.stopServer(null, false);
 			}
 		} catch(Throwable e) {
-			appendLog("Failed to launch server: " + Functions.throwableToStr(e));
+			Main.appendLog("Failed to launch server: " + Functions.throwableToStr(e));
 			if(e.getMessage() != null && e.getMessage().startsWith("Failed to retrieve RMIServer stub: ")) {
 				e.printStackTrace();
-				if(javaExecutable.replace("\\", "/").contains("/jdk")) {
-					new JDKWarningDialog(shell).open();
+				if(Main.javaExecutable.replace("\\", "/").contains("/jdk")) {
+					new JDKWarningDialog(Main.shell).open();
 				}
 			}
 		}
-		startServer = false;
-		isProcessBeingStarted = false;
+		Main.startServer = false;
+		Main.isProcessBeingStarted = false;
 	}
 	
 	private static volatile boolean			stoppingServer			= false;
@@ -734,16 +740,16 @@ public final class Main {
 	protected static final String			remAdminDisabled		= "Remote Administration is disabled. To allow clients to connect, please click the \"Enable\" button above.";
 	
 	public static final void stopServer(RemoteClient from, boolean rightNow) {
-		if(stoppingServer && !rightNow) {
+		if(Main.stoppingServer && !rightNow) {
 			final String msg = "The server has already been told to shut down.\r\nGive it a second!";
 			if(from != null) {
 				from.println("WARN: " + msg);
 			} else {
-				appendLog("==" + msg);
+				Main.appendLog("==" + msg);
 			}
 			return;
 		}
-		stoppingServer = true;
+		Main.stoppingServer = true;
 		if(process != null && process.process.isAlive()) {
 			if(from != null) {
 				process.stopServerClient = from;
@@ -751,25 +757,25 @@ public final class Main {
 				from = process.stopServerClient;
 			}
 			if(rightNow) {
-				appendLog("Forcibly closing server process; please wait...");
+				Main.appendLog("Forcibly closing server process; please wait...");
 				process.process.destroyForcibly();
-				serverStoppedByUser = true;
+				Main.serverStoppedByUser = true;
 			} else {
-				handleInput(from, "save-all\nstop");//process.process.destroyForcibly();
+				Main.handleInput(from, "save-all\nstop");//process.process.destroyForcibly();
 				final long startTime = System.currentTimeMillis();
 				final long waitTime = 15000L;
 				long lastSecond = startTime;
 				int secondsWaited = 15;
-				serverStoppedByUser = true;
-				appendLog("Stopping server; waiting up to 15 seconds for server to shutdown:");
+				Main.serverStoppedByUser = true;
+				Main.appendLog("Stopping server; waiting up to 15 seconds for server to shutdown:");
 				while(process != null && process.process.isAlive()) {
-					mainLoop();
+					Main.mainLoop();
 					final long now = System.currentTimeMillis();
 					long elapsedTime = now - startTime;
 					long elapsedSecondTime = now - lastSecond;
 					if(elapsedSecondTime >= 1000L) {
 						lastSecond = now;
-						appendLog("\t" + --secondsWaited + " seconds remaining");
+						Main.appendLog("\t" + --secondsWaited + " seconds remaining");
 					}
 					if(elapsedTime > waitTime) {
 						if(process != null) {
@@ -780,32 +786,32 @@ public final class Main {
 				}
 			}
 			if(from != null) {
-				appendLog("Server " + (rightNow ? "forcibly closed" : "shut") + " down by \"" + from.getDisplayName() + "\".");
+				Main.appendLog("Server " + (rightNow ? "forcibly closed" : "shut") + " down by \"" + from.getDisplayName(true) + "\".");
 			}
-			updateShellAppearance();
+			Main.updateShellAppearance();
 		} else if(from != null) {
 			from.println("WARN: The server is not active.");
-			appendLog("User \"" + from.getDisplayName() + "\" attempted to stop the server when it is already stopped!");
+			Main.appendLog("User \"" + from.getDisplayName(true) + "\" attempted to stop the server when it is already stopped!");
 		}
-		stoppingServer = false;
+		Main.stoppingServer = false;
 	}
 	
 	public static final void restartServer(RemoteClient from) {
 		if(Main.isProcessAlive()) {
 			if(from != null) {
 				from.println("SERVER-STATE: " + Main.getServerState());
-				appendLog("Restarting server; please wait...");
+				Main.appendLog("Restarting server; please wait...");
 			}
 			Main.stopServer(from, false);
-			waitUntilProcessEnded();
-			stoppingServer = false;
-			delayedServerStartup(from);
+			Main.waitUntilProcessEnded();
+			Main.stoppingServer = false;
+			Main.delayedServerStartup(from);
 			if(from != null) {
 				from.println("SERVER-STATE: " + Main.getServerState());
 			}
 		} else if(from != null) {
 			from.println("WARN: The server is not active.");
-			appendLog("User \"" + from.getDisplayName() + "\" attempted to restart the server when it is not already started!");
+			Main.appendLog("User \"" + from.getDisplayName(true) + "\" attempted to restart the server when it is not already started!");
 		}
 	}
 	
@@ -816,21 +822,21 @@ public final class Main {
 	}
 	
 	public static final String getProcessCpuUsage() {
-		if(!isProcessAlive()) {
+		if(!Main.isProcessAlive()) {
 			return null;
 		}
 		return process.cpuUsage != -1L ? process.cpuUsage + "" : null;
 	}
 	
 	public static final String getProcessRamUsage() {
-		if(!isProcessAlive()) {
+		if(!Main.isProcessAlive()) {
 			return null;
 		}
 		return process.usedRam != -1L && process.committedRam != -1L ? process.usedRam + "-" + process.committedRam : null;
 	}
 	
 	public static final String getProcessThreadCount() {
-		if(!isProcessAlive()) {
+		if(!Main.isProcessAlive()) {
 			return null;
 		}
 		return process.threadCount != -1 ? process.threadCount + "" : null;
@@ -846,14 +852,14 @@ public final class Main {
 	}
 	
 	private static final void onServerShutdown(RemoteClient from) {
-		if(!hasProcessDied || !automaticServerRestart) {
+		if(!Main.hasProcessDied || !Main.automaticServerRestart) {
 			return;
 		}
-		if(!serverStoppedByUser) {
-			appendLog("Restarting server; please wait...");
-			delayedServerStartup(null);
+		if(!Main.serverStoppedByUser) {
+			Main.appendLog("Restarting server; please wait...");
+			Main.delayedServerStartup(null);
 		} else {
-			appendLog("Server stopped by user" + (from != null ? " \"" + from.getDisplayName() + "\"" : "") + "; aborting automatic restart.");
+			Main.appendLog("Server stopped by user" + (from != null ? " \"" + from.getDisplayName(true) + "\"" : "") + "; aborting automatic restart.");
 		}
 	}
 	
@@ -876,14 +882,14 @@ public final class Main {
 				process.input.flush();
 			}
 		}
-		addLogToConsole((from != null ? from.getDisplayName() : "[Console]@127.0.0.1") + ">" + input);
+		Main.addLogToConsole((from != null ? from.getDisplayName(false) : "[Console]@127.0.0.1") + ">" + input);
 	}
 	
 	protected static final void setTextFor(StyledText styledText) {
 		String text = "";
-		if(styledText == output) {//if(errorStr == null) {
+		if(styledText == Main.output) {//if(errorStr == null) {
 			text = outTxt.getValue() + ">";//XXX Console caret addition
-		} else if(styledText == error) {
+		} else if(styledText == Main.error) {
 			text = errTxt.getValue();
 		}
 		if(text == null) {
@@ -897,7 +903,7 @@ public final class Main {
 			/*if(HTTPClientRequest.debug) {
 				this.inputField.setText("index: \"" + index + "\"; line count: \"" + lineCount + "\"; visible lines: \"" + numOfVisibleLines + "\";");
 			}*/
-			runClock();
+			Main.runClock();
 			if(lineCount - index == numOfVisibleLines) {
 				index = -1;
 			}
@@ -928,13 +934,13 @@ public final class Main {
 				}
 			}
 			styledText.setTopIndex(index);//originalIndex);//this.isScrollLocked ? originalIndex : index);
-			runClock();
+			Main.runClock();
 		}
 	}
 	
 	protected static final boolean loadSettings() {
 		if(!settingsFile.exists()) {
-			return saveSettings();
+			return Main.saveSettings();
 		}
 		try(BufferedReader br = new BufferedReader(new FileReader(settingsFile))) {
 			while(br.ready()) {
@@ -978,7 +984,7 @@ public final class Main {
 						Main.btnUseG1GC.setSelection(Boolean.valueOf(value).booleanValue());
 						Main.useG1GC = Main.btnUseG1GC.getSelection();
 					} else if(pname.equalsIgnoreCase("progArgs")) {
-						txtProgramArgs.setText(value);
+						Main.txtProgramArgs.setText(value);
 					} else if(pname.equalsIgnoreCase("javaHome")) {
 						File home = new File(value);
 						if(home.isDirectory()) {
@@ -997,113 +1003,113 @@ public final class Main {
 							}
 						}
 					} else if(pname.equalsIgnoreCase("enableScheduledRestarts")) {
-						enableScheduledRestarts = Boolean.valueOf(value).booleanValue();
+						Main.enableScheduledRestarts = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("restartCommands")) {
-						restartCommands = value.replace("<newline>", "\r\n");
+						Main.restartCommands = value.replace("<newline>", "\r\n");
 					} else if(pname.equalsIgnoreCase("enableRemoteAdministration")) {
 						RemoteAdmin.enableRemoteAdministration = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("monday")) {
-						scheduledRestartData.monday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.monday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("tuesday")) {
-						scheduledRestartData.tuesday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.tuesday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("wednesday")) {
-						scheduledRestartData.wednesday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.wednesday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("thursday")) {
-						scheduledRestartData.thursday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.thursday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("friday")) {
-						scheduledRestartData.friday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.friday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("saturday")) {
-						scheduledRestartData.saturday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.saturday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("sunday")) {
-						scheduledRestartData.sunday = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.sunday = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable1")) {
-						scheduledRestartData.enable1 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable1 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable2")) {
-						scheduledRestartData.enable2 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable2 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable3")) {
-						scheduledRestartData.enable3 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable3 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable4")) {
-						scheduledRestartData.enable4 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable4 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable5")) {
-						scheduledRestartData.enable5 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable5 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("enable6")) {
-						scheduledRestartData.enable6 = Boolean.valueOf(value).booleanValue();
+						Main.scheduledRestartData.enable6 = Boolean.valueOf(value).booleanValue();
 					} else if(pname.equalsIgnoreCase("hour1")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour1 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour1 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("hour2")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour2 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour2 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("hour3")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour3 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour3 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("hour4")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour4 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour4 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("hour5")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour5 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour5 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("hour6")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.hour6 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.hour6 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute1")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute1 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute1 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute2")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute2 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute2 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute3")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute3 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute3 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute4")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute4 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute4 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute5")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute5 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute5 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("minute6")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.minute6 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.minute6 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second1")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second1 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second1 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second2")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second2 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second2 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second3")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second3 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second3 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second4")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second4 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second4 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second5")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second5 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second5 = Integer.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("second6")) {
 						if(StringUtil.isStrInt(value)) {
-							scheduledRestartData.second6 = Integer.valueOf(value).intValue();
+							Main.scheduledRestartData.second6 = Integer.valueOf(value).intValue();
 						}
 					}
 				}
 			}
-			updateConsoleFont();
+			Main.updateConsoleFont();
 			return true;
 		} catch(Throwable e) {
 			e.printStackTrace();
@@ -1125,24 +1131,23 @@ public final class Main {
 			pr.println("automaticServerStartup=" + Main.automaticServerStartup);
 			pr.println("automaticServerRestart=" + Main.automaticServerRestart);
 			pr.println("alwaysShowTrayIcon=" + Main.alwaysShowTrayIcon);
-			final String sJarPath = serverJar.getAbsolutePath();//The following extra code allows for saving a relative file path if the user moves their server files around a lot(e.g. removable drive, rename a parent folder, etc.)
-			int indexOfDot = sJarPath.indexOf(".\\");
-			indexOfDot = indexOfDot == -1 ? sJarPath.indexOf("./") : indexOfDot;
+			final String sJarPath = Main.serverJar.getAbsolutePath();//The following extra code allows for saving a relative file path if the user moves their server files around a lot(e.g. removable drive, rename a parent folder, etc.)
+			int indexOfDot = sJarPath.indexOf(".\\") == -1 ? sJarPath.indexOf("./") : sJarPath.indexOf(".\\");
 			pr.println("serverJar=" + (indexOfDot != -1 ? sJarPath.substring(indexOfDot) : sJarPath));
-			pr.println("vmArgs=" + txtVmArgs.getText());
-			pr.println("useG1GC=" + btnUseG1GC.getSelection());
-			pr.println("progArgs=" + txtProgramArgs.getText());
+			pr.println("vmArgs=" + Main.txtVmArgs.getText());
+			pr.println("useG1GC=" + Main.btnUseG1GC.getSelection());
+			pr.println("progArgs=" + Main.txtProgramArgs.getText());
 			pr.println("javaHome=" + JavaProgramArguments.getArguments().javaHome);
-			pr.println("javaExec=" + javaExecutable);
+			pr.println("javaExec=" + Main.javaExecutable);
 			pr.println("");
 			pr.println("# Remote administration settings:");
 			pr.println("remAdminListenPort=" + RemoteAdmin.listenPort);
 			pr.println("enableRemoteAdministration=" + RemoteAdmin.enableRemoteAdministration);
 			pr.println("");
 			pr.println("# Scheduled restart settings:");
-			pr.println("enableScheduledRestarts=" + enableScheduledRestarts);
-			pr.println("restartCommands=" + restartCommands.replace("\r\n", "<newline>"));
-			pr.println(scheduledRestartData.toString());
+			pr.println("enableScheduledRestarts=" + Main.enableScheduledRestarts);
+			pr.println("restartCommands=" + Main.restartCommands.replace("\r\n", "<newline>"));
+			pr.println(Main.scheduledRestartData.toString());
 			pr.println();
 			return true;
 		} catch(Throwable ignored) {
@@ -1156,13 +1161,13 @@ public final class Main {
 			str = str.substring(2);
 		}
 		try {
-			if(!wrapperLog.isDisposed()) {
-				if(wrapperLog.getText().isEmpty()) {
-					wrapperLog.setText(str + "\r\n");
+			if(!Main.wrapperLog.isDisposed()) {
+				if(Main.wrapperLog.getText().isEmpty()) {
+					Main.wrapperLog.setText(str + "\r\n");
 				} else {
-					wrapperLog.setText(wrapperLog.getText() + "\r\n" + str);
+					Main.wrapperLog.setText(Main.wrapperLog.getText() + "\r\n" + str);
 				}
-				wrapperLog.setTopIndex(wrapperLog.getLineCount() - 1);
+				Main.wrapperLog.setTopIndex(Main.wrapperLog.getLineCount() - 1);
 			}
 			if(sendToClients) {
 				for(String s : str.split(Pattern.quote("\n"))) {
@@ -1180,25 +1185,25 @@ public final class Main {
 	}
 	
 	protected static final void updateConsoleFont() {
-		if(shell == null || shell.isDisposed() || output == null) {
+		if(Main.shell == null || Main.shell.isDisposed() || Main.output == null) {
 			return;
 		}
-		final Font font = SWTResourceManager.getFont(consoleFontName, consoleFontSize, (consoleFontItalicized ? SWT.ITALIC : SWT.NORMAL), consoleFontStrikeout, consoleFontUnderLined);
+		final Font font = SWTResourceManager.getFont(Main.consoleFontName, Main.consoleFontSize, (Main.consoleFontItalicized ? SWT.ITALIC : SWT.NORMAL), Main.consoleFontStrikeout, Main.consoleFontUnderLined);
 		if(font != null) {
-			if(consoleFontBold) {
-				output.setFont(SWTResourceManager.getBoldFont(font));
+			if(Main.consoleFontBold) {
+				Main.output.setFont(SWTResourceManager.getBoldFont(font));
 			} else {
-				output.setFont(font);
+				Main.output.setFont(font);
 			}
 		} else {
-			appendLog("==The font \"" + Main.consoleFontName + "\" was not found or did not load.");
+			Main.appendLog("==The font \"" + Main.consoleFontName + "\" was not found or did not load.");
 		}
 	}
 	
 	@SuppressWarnings("unused")
 	private static final void createContents() {
 		final Point shellSize = shell.getSize();
-		updateConsoleFont();
+		Main.updateConsoleFont();
 		
 		tabFolder = new TabFolder(shell, SWT.NONE);
 		tabFolder.setBackground(SWTResourceManager.getColor(SWT.COLOR_WIDGET_BACKGROUND));
@@ -1870,7 +1875,7 @@ public final class Main {
 			}
 		});
 		
-		if(!headless) {
+		if(!isHeadless()) {
 			final Tray tray = display.getSystemTray();
 			if(tray != null) {
 				trayIcon = new TrayIcon(shell, tray);
@@ -2262,7 +2267,7 @@ public final class Main {
 	}
 	
 	protected static final void openShell() {
-		if(headless) {
+		if(isHeadless()) {
 			return;
 		}
 		if(!shell.getVisible()) {
@@ -2273,7 +2278,7 @@ public final class Main {
 	}
 	
 	protected static final void hideShell(boolean skipCheck) {
-		if(headless) {
+		if(isHeadless()) {
 			return;
 		}
 		Tray tray = display.getSystemTray();
@@ -2405,7 +2410,7 @@ public final class Main {
 						}
 						try {
 							client.sendPopupMessage(msg);
-							appendLog("==Message sent to client \"" + client.getDisplayName() + "\".");
+							appendLog("==Message sent to client \"" + client.getDisplayName(true) + "\".");
 						} catch(Throwable e) {
 							e.printStackTrace();
 						}

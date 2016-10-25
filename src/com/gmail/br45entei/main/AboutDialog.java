@@ -33,7 +33,7 @@ public class AboutDialog extends Dialog {
 	 * @return the result */
 	public Response open() {
 		this.createContents();
-		if(!Main.headless) {
+		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
 			//Display display = getParent().getDisplay();

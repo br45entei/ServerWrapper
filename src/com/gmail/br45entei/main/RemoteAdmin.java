@@ -133,7 +133,7 @@ public class RemoteAdmin {
 								handleRemoteAdminClient(listenSocket.accept());
 							} catch(SocketException ignored) {
 								return;
-							} catch(IOException e) {
+							} catch(IOException | RejectedExecutionException e) {
 								e.printStackTrace();
 								Main.appendLog("[ServerWrapper] Unable to handle incoming client for remote administration: " + Functions.throwableToStr(e));
 							}
@@ -218,7 +218,7 @@ public class RemoteAdmin {
 												client.println(PROTOCOL + " 42 PASS");
 												client.setConnectionType("NORMAL");
 												client.startSendingLogs();
-												Main.appendLog("User \"" + client.getDisplayName() + "\" logged in.");
+												Main.appendLog("User \"" + client.getDisplayName(true) + "\" logged in.");
 												while(!client.socket.isClosed()) {
 													String data = "";
 													String line;
@@ -240,7 +240,7 @@ public class RemoteAdmin {
 													}
 													Functions.sleep(10L);
 												}
-												Main.appendLog("User \"" + client.getDisplayName() + "\" disconnected.");
+												Main.appendLog("User \"" + client.getDisplayName(true) + "\" disconnected.");
 											} else if(args.length == 4) {
 												String connectionType = args[3];
 												if(connectionType.equals("FILETRANSFER")) {
@@ -259,7 +259,7 @@ public class RemoteAdmin {
 															if(clientUser != null) {
 																clientUser.ftConnection = client;
 																RemoteClient.instances.remove(client);
-																Main.appendLog("User \"" + client.getDisplayName() + "\" file transfer connection established.");
+																Main.appendLog("User \"" + client.getDisplayName(true) + "\" file transfer connection established.");
 																while(!client.socket.isClosed()) {
 																	try {
 																		if(!handleRemoteAdminFileTransferData(clientUser, user)) {
@@ -274,7 +274,7 @@ public class RemoteAdmin {
 																	Functions.sleep(10L);
 																}
 																clientUser.ftConnection = null;
-																Main.appendLog("User \"" + client.getDisplayName() + "\" file transfer disconnected.");
+																Main.appendLog("User \"" + client.getDisplayName(true) + "\" file transfer disconnected.");
 															} else {
 																client.println(PROTOCOL + " 28 USER ALREADY CONNECTED: " + username);
 															}
@@ -423,7 +423,7 @@ public class RemoteAdmin {
 				data = null;
 				System.gc();
 				client.ftConnection.listFiles();
-				Main.appendLog("User FT: \"" + client.getDisplayName() + "\" uploaded file \"" + getPathRelativeToServerFolder(file) + "\";");
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" UPLOADED file \"" + getPathRelativeToServerFolder(file) + "\";");
 			} else {
 				client.sendPopupMessage("You do not have permission to modify server files." + (!user.permissions.canDeleteFiles ? "\r\n\r\n('Delete' is also a required permission when creating files and folders.)" : ""));
 			}
@@ -444,7 +444,7 @@ public class RemoteAdmin {
 			}
 			client.ftConnection.println("FILE");
 			FileTransfer.sendFile(file, client.ftConnection.outStream, null);
-			Main.appendLog("User FT: \"" + client.getDisplayName() + "\" downloaded file \"" + getPathRelativeToServerFolder(file) + "\";");
+			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded file \"" + getPathRelativeToServerFolder(file) + "\";");
 		} else if(line.equals("DIR")) {
 			client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(client.ftConnection.currentFTDir));
 		} else if(line.startsWith("DIR: ")) {
@@ -484,10 +484,10 @@ public class RemoteAdmin {
 			final boolean deleted = FileDeleteStrategy.FORCE.deleteQuietly(file);
 			client.sendPopupMessage(deleted ? "File \"" + deletePath + "\" was deleted successfully." : "Unable to delete file \"" + deletePath + "\";\r\nis it in use?");
 			if(deleted) {
-				Main.appendLog("User FT: \"" + client.getDisplayName() + "\" DELETED file \"" + deletePath + "\";");
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" DELETED file \"" + deletePath + "\";");
 				client.ftConnection.listFiles();
 			} else {
-				Main.appendLog("User FT: \"" + client.getDisplayName() + "\" attepted to DELETE file \"" + deletePath + "\", but file was inaccessible;");
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" attepted to DELETE file \"" + deletePath + "\", but file was inaccessible;");
 			}
 		} else if(line.startsWith("RENAME: ")) {
 			if(!user.permissions.canModifyFiles) {
@@ -513,7 +513,7 @@ public class RemoteAdmin {
 				Path source = Paths.get(file.toURI());
 				try {
 					Files.move(source, source.resolveSibling(renameTo));
-					Main.appendLog("User FT: \"" + client.getDisplayName() + "\" RENAMED file \"" + renamePath + "\" to: \"" + renameTo + "\";");
+					Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" RENAMED file \"" + renamePath + "\" to: \"" + renameTo + "\";");
 					client.ftConnection.listFiles();
 				} catch(IOException e) {
 					client.sendPopupMessage("An error occurred when renaming the file \"" + renamePath + "\".\r\nIs the file in use?\r\nError message: " + e.getMessage());
@@ -541,7 +541,7 @@ public class RemoteAdmin {
 				if(!check.mkdirs()) {
 					client.sendPopupMessage("An unknown error occurred when creating the new folder \"" + check.getName() + "\".\r\nPlease try again.");
 				} else {
-					Main.appendLog("User FT: \"" + client.getDisplayName() + "\" CREATED folder \"" + newFolderName + "\";");
+					Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + newFolderName + "\";");
 					client.sendPopupMessage("The folder \"" + check.getName() + "\" was created in the current directory successfully.");
 					client.ftConnection.listFiles();
 				}
@@ -568,7 +568,7 @@ public class RemoteAdmin {
 				if(!check.mkdirs()) {
 					client.sendPopupMessage("An unknown error occurred when creating the new folder \"" + check.getName() + "\".\r\nPlease try again.");
 				} else {
-					Main.appendLog("User FT: \"" + client.getDisplayName() + "\" CREATED folder \"" + newFolderName + "\";");
+					Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + newFolderName + "\";");
 					client.ftConnection.currentFTDir = check;
 					client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
 				}
@@ -597,7 +597,7 @@ public class RemoteAdmin {
 				client.ftConnection.println("FILE");
 				FileTransfer.sendFile(file, client.ftConnection.outStream, null);
 			}
-			Main.appendLog("User FT: \"" + client.getDisplayName() + "\" downloaded contents of folder \"" + getPathRelativeToServerFolder(file) + "\";");
+			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded contents of folder \"" + getPathRelativeToServerFolder(file) + "\";");
 		} else if(line.startsWith("NOPOPUPDIALOGS: ")) {
 			client.showPopupDialogs = !line.substring("NOPOPUPDIALOGS: ".length()).equalsIgnoreCase("true");
 		} else {

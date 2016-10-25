@@ -39,7 +39,7 @@ public class JDKWarningDialog extends Dialog {
 	 * @return the result */
 	public Object open() {
 		createContents();
-		if(!Main.headless) {
+		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
 			Display display = getParent().getDisplay();

@@ -40,7 +40,7 @@ public class FeatureNotImplementedDialog extends Dialog {
 	public Object open(String msg) {
 		createContents(msg);
 		Functions.centerShell2OnShell1(getParent(), this.shell);
-		if(!Main.headless) {
+		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
 			Display display = getParent().getDisplay();

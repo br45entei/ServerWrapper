@@ -31,7 +31,7 @@ public final class ProcessIO {
 	public volatile OutputStream	in;
 	public volatile PrintWriter		input;
 	
-	public volatile String			cmdLine;
+	public final String				cmdLine;
 	
 	public volatile RemoteClient	stopServerClient		= null;
 	
@@ -58,7 +58,7 @@ public final class ProcessIO {
 	
 	public ProcessIO(String process, String vmArgs, String programArgs, File builderDirectory) {
 		this.jmxRemotePort = IOUtils.getNextAvailablePort();
-		this.cmdLine = process + jmxVMArgs.replace("PORT", this.jmxRemotePort + "") + vmArgs + programArgs;
+		this.cmdLine = process + jmxVMArgs.replace("PORT", Integer.toString(this.jmxRemotePort)) + vmArgs + programArgs;
 		this.builder = new ProcessBuilder(this.cmdLine.split(Pattern.quote(" ")));
 		this.builder.redirectOutput(Redirect.PIPE);
 		this.builder.redirectError(Redirect.PIPE);

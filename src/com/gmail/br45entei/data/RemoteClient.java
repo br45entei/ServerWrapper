@@ -280,8 +280,8 @@ public final class RemoteClient implements Closeable {
 		return(this.username.isEmpty() ? "<null>" : this.getUsername());
 	}
 	
-	public final String getDisplayName() {
-		return (this.username.isEmpty() ? "" : this.getUsername() + "@") + this.getIpAddress();
+	public final String getDisplayName(boolean showPort) {
+		return (this.username.isEmpty() ? "" : this.getUsername() + "@") + (showPort ? this.getIpAddress() : AddressUtil.getClientAddressNoPort(this.getIpAddress()));
 	}
 	
 	protected final void sendCommands() {

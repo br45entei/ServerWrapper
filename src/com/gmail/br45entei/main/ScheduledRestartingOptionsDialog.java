@@ -66,7 +66,7 @@ public class ScheduledRestartingOptionsDialog extends Dialog {
 	 * @return the result */
 	public Response open() {
 		createContents();
-		if(!Main.headless) {
+		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
 			while(!this.shell.isDisposed()) {
