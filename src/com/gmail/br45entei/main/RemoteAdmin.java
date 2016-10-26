@@ -6,6 +6,7 @@ import com.gmail.br45entei.swt.Functions;
 import com.gmail.br45entei.util.FileTransfer;
 import com.gmail.br45entei.util.FileTransfer.FileData;
 import com.gmail.br45entei.util.StringUtil;
+import com.gmail.br45entei.util.StringUtil.EnumOS;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -17,8 +18,10 @@ import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -395,7 +398,69 @@ public class RemoteAdmin {
 		if(line == null || line.equals(PROTOCOL + " -1 CLOSE")) {
 			return false;
 		}
-		if(line.equals("FILE")) {
+		if(line.equals("GETALLFILES")) {
+			if(!user.permissions.canDownloadFiles) {
+				client.sendPopupMessage("You do not have permission to download server files.");
+				return continueData;
+			}
+			final File oldDir = client.ftConnection.currentFTDir;
+			client.ftConnection.currentFTDir = Main.getServerFolder();
+			//client.ftConnection.println("DIR: /");
+			ConcurrentLinkedDeque<File[]> queue = new ConcurrentLinkedDeque<>();
+			ConcurrentLinkedDeque<File[]> queue1 = new ConcurrentLinkedDeque<>();
+			queue.add(client.currentFTDir.listFiles());
+			queue1.add(client.currentFTDir.listFiles());
+			File[] files;
+			boolean homeDir = true;
+			int total = 0;
+			while((files = queue1.poll()) != null) {
+				for(File file : files) {
+					if(file.isDirectory()) {
+						if(homeDir && file.getName().equals("Users")) {
+							continue;
+						}
+						File[] listFiles = file.listFiles();
+						total += listFiles.length + 1;
+						queue.add(listFiles);
+						queue1.add(listFiles);
+						continue;
+					}
+					total++;
+				}
+				homeDir = false;
+			}
+			int index = 0;
+			homeDir = true;
+			while((files = queue.poll()) != null) {
+				for(File file : files) {
+					String percentComplete = StringUtil.decimal.format(((index + 0.00D) / (total + 0.00D)) * 100.00D);
+					index++;
+					if(file.isDirectory()) {
+						if(homeDir && file.getName().equals("Users")) {
+							continue;
+						}
+						client.ftConnection.println("GETALLFILES: " + percentComplete + " " + file.getName());
+						client.ftConnection.println("MKDIR: " + getPathRelativeToServerFolder(file));
+						continue;
+					}
+					if(!Files.isReadable(Paths.get(file.toURI())) || (homeDir && file.getName().equalsIgnoreCase("settings.txt"))) {
+						continue;
+					}
+					client.ftConnection.println("GETALLFILES: " + percentComplete + " " + file.getName());
+					client.ftConnection.currentFTDir = file.getParentFile();
+					String path = getPathRelativeToServerFolder(client.ftConnection.currentFTDir);
+					client.ftConnection.println("DIR: " + path);
+					client.ftConnection.println("FILE");
+					FileTransfer.sendFile(file, client.ftConnection.outStream, null);
+				}
+				homeDir = false;
+				String percentComplete = StringUtil.decimal.format(((index + 0.00D) / (total + 0.00D)) * 100.00D);
+				client.ftConnection.println("GETALLFILES: " + percentComplete);
+			}
+			client.ftConnection.println("GETALLFILES: END");
+			client.ftConnection.currentFTDir = oldDir;
+			client.ftConnection.listFiles();
+		} else if(line.equals("FILE")) {
 			FileData data = FileTransfer.readFile(client.ftConnection.in);//Go ahead and parse the incoming file data to prevent garbled data on the next run, even if the user doesn't have permission to upload files
 			if(data == null) {
 				continueData = false;
@@ -408,6 +473,7 @@ public class RemoteAdmin {
 					return continueData;
 				}
 				File file = new File(client.ftConnection.currentFTDir, fileName);
+				final boolean existedBefore = file.isFile();
 				boolean success = true;
 				try(FileOutputStream out = new FileOutputStream(file)) {
 					out.write(data.data, 0, data.data.length);
@@ -423,7 +489,7 @@ public class RemoteAdmin {
 				data = null;
 				System.gc();
 				client.ftConnection.listFiles();
-				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" UPLOADED file \"" + getPathRelativeToServerFolder(file) + "\";");
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" " + (existedBefore ? "AMENDED" : "CREATED") + " file \"" + getPathRelativeToServerFolder(file) + "\";");
 			} else {
 				client.sendPopupMessage("You do not have permission to modify server files." + (!user.permissions.canDeleteFiles ? "\r\n\r\n('Delete' is also a required permission when creating files and folders.)" : ""));
 			}
@@ -510,11 +576,32 @@ public class RemoteAdmin {
 					client.sendPopupMessage("You cannot rename that " + (file.isFile() ? "file" : "folder") + "!");
 					return continueData;
 				}
+				File check = new File(file.getParentFile(), renameTo);
+				if(check.getName().equals(file.getName())) {
+					return continueData;//Cancelled rename operation client-side, ignore
+				}
+				if(check.exists()) {//make sure the destination does not exist to prevent accidental overwriting
+					if(StringUtil.getOSType() != EnumOS.WINDOWS && check.getName().equalsIgnoreCase(file.getName())) {//allow case-insensitive renaming on windows
+						client.ftConnection.println(PROTOCOL + " 47 FILESYSTEM OBJECT NAME CONFLICT: " + check.getName());
+						client.ftConnection.listFiles();
+						return continueData;
+					}
+				}
 				Path source = Paths.get(file.toURI());
 				try {
-					Files.move(source, source.resolveSibling(renameTo));
-					Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" RENAMED file \"" + renamePath + "\" to: \"" + renameTo + "\";");
-					client.ftConnection.listFiles();
+					boolean success = true;
+					if(file.isDirectory() && file.getName().equalsIgnoreCase(renameTo)) {
+						File folder = new File(file.getParentFile(), renameTo);
+						success = file.renameTo(folder);
+					} else {
+						Files.move(source, source.resolveSibling(renameTo), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+					}
+					if(success) {
+						Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" RENAMED file \"" + renamePath + "\" to: \"" + renameTo + "\";");
+						client.ftConnection.listFiles();
+					} else {
+						client.sendPopupMessage("Unable to rename " + (file.isDirectory() ? "folder " : "file \"") + file.getName() + "\"! Is it in use?");
+					}
 				} catch(IOException e) {
 					client.sendPopupMessage("An error occurred when renaming the file \"" + renamePath + "\".\r\nIs the file in use?\r\nError message: " + e.getMessage());
 				}
@@ -531,7 +618,7 @@ public class RemoteAdmin {
 				return continueData;
 			}
 			if(StringUtil.isFileSystemSafe(newFolderName)) {
-				File parent = client.currentFTDir;
+				File parent = client.ftConnection.currentFTDir;
 				File check = new File(parent, newFolderName);
 				if(check.exists()) {
 					client.ftConnection.println(PROTOCOL + " 47 FILESYSTEM OBJECT ALREADY EXISTS");

@@ -16,6 +16,8 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
@@ -146,7 +148,9 @@ public final class RemoteClient implements Closeable {
 				folders.add(file);
 			}
 			if(file.isFile()) {
-				files.add(file);
+				if(Files.isReadable(Paths.get(file.toURI()))) {
+					files.add(file);
+				}
 			}
 		}
 		final boolean isHomeDir = this.currentFTDir.getAbsolutePath().equalsIgnoreCase(Main.getServerFolder().getAbsolutePath());
@@ -158,7 +162,7 @@ public final class RemoteClient implements Closeable {
 			}
 		}
 		for(File file : files) {
-			if(!file.getName().equalsIgnoreCase("settings.txt") || !isHomeDir) {
+			if(!file.equals(Main.getClassPathJarFile()) && (!file.getName().equalsIgnoreCase("settings.txt") || !isHomeDir)) {
 				URLConnection url = file.toURI().toURL().openConnection();
 				filePaths.add(RemoteAdmin.getPathRelativeToServerFolder(file) + "?" + Functions.humanReadableByteCount(url.getContentLengthLong(), true, 6) + "?" + StringUtil.getCacheTime(url.getLastModified()));
 				try {
@@ -171,6 +175,7 @@ public final class RemoteClient implements Closeable {
 		folderPaths.sort(String.CASE_INSENSITIVE_ORDER);
 		//filePaths.sort(String.CASE_INSENSITIVE_ORDER);
 		final File parentDir = isHomeDir ? this.currentFTDir : this.currentFTDir.getParentFile();
+		this.println("DIR: " + RemoteAdmin.getPathRelativeToServerFolder(this.currentFTDir));
 		this.println("LIST: " + (folderPaths.size() + filePaths.size() + (!isHomeDir ? 1 : 0)));
 		if(!isHomeDir) {
 			URLConnection url = parentDir.toURI().toURL().openConnection();

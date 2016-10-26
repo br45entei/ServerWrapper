@@ -72,9 +72,14 @@ import org.eclipse.wb.swt.SWTResourceManager;
 @SuppressWarnings("javadoc")
 public final class Main {
 	
-	private static final boolean	headless	= GraphicsEnvironment.isHeadless();
+	private static final boolean					headless	= GraphicsEnvironment.isHeadless();
 	// Would use https://www.x.org/archive/X11R6.8.2/doc/Xvfb.1.html , but not opening shell works too... XD
-	private static volatile boolean	actHeadless	= false;
+	private static volatile boolean					actHeadless	= false;
+	private static volatile JavaProgramArguments	sysArgs;
+	
+	public static final File getClassPathJarFile() {
+		return JavaProgramArguments.getClassPathJarFile();
+	}
 	
 	public static final boolean isHeadless() {
 		return headless || actHeadless;
@@ -319,12 +324,12 @@ public final class Main {
 	 * @param args System command arguments */
 	public static final void main(String[] args) {
 		JavaProgramArguments.initializeFromMainClass(Main.class, args);
-		JavaProgramArguments arguments = JavaProgramArguments.getArguments();
-		Main.javaHome = arguments.javaHome;
-		Main.javaExecutable = arguments.javaExecutable;
-		Main.startServerImmediately = StringUtil.containsIgnoreCase(arguments.arguments, "startServer") || StringUtil.containsIgnoreCase(arguments.arguments, "runServer");
-		Main.startHiddenInTray = StringUtil.containsIgnoreCase(arguments.arguments, "trayOnly") || StringUtil.containsIgnoreCase(arguments.arguments, "silent") || StringUtil.containsIgnoreCase(arguments.arguments, "hidden");
-		Main.actHeadless = StringUtil.containsIgnoreCase(arguments.arguments, "-headless") || StringUtil.containsIgnoreCase(arguments.arguments, "headless");
+		sysArgs = JavaProgramArguments.getArguments();
+		Main.javaHome = sysArgs.javaHome;
+		Main.javaExecutable = sysArgs.javaExecutable;
+		Main.startServerImmediately = StringUtil.containsIgnoreCase(sysArgs.arguments, "startServer") || StringUtil.containsIgnoreCase(sysArgs.arguments, "runServer");
+		Main.startHiddenInTray = StringUtil.containsIgnoreCase(sysArgs.arguments, "trayOnly") || StringUtil.containsIgnoreCase(sysArgs.arguments, "silent") || StringUtil.containsIgnoreCase(sysArgs.arguments, "hidden");
+		Main.actHeadless = StringUtil.containsIgnoreCase(sysArgs.arguments, "-headless") || StringUtil.containsIgnoreCase(sysArgs.arguments, "headless");
 		Main.swtThread = Thread.currentThread();
 		
 		Main.display = Display.getDefault();
