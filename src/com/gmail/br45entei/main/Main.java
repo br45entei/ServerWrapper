@@ -8,6 +8,11 @@ import com.gmail.br45entei.main.ScheduledRestartingOptionsDialog.TimeResult;
 import com.gmail.br45entei.process.ProcessIO;
 import com.gmail.br45entei.swt.Functions;
 import com.gmail.br45entei.swt.Response;
+import com.gmail.br45entei.update.PerformUpdateDialog;
+import com.gmail.br45entei.update.PromptDownloadUpdateDialog;
+import com.gmail.br45entei.update.UpdateChecker.UpdateResult;
+import com.gmail.br45entei.update.UpdateChecker.UpdateType;
+import com.gmail.br45entei.update.UpdateCheckerDialog;
 import com.gmail.br45entei.util.IOUtils;
 import com.gmail.br45entei.util.JavaProgramArguments;
 import com.gmail.br45entei.util.StringUtil;
@@ -76,6 +81,10 @@ public final class Main {
 	// Would use https://www.x.org/archive/X11R6.8.2/doc/Xvfb.1.html , but not opening shell works too... XD
 	private static volatile boolean					actHeadless	= false;
 	private static volatile JavaProgramArguments	sysArgs;
+	
+	public static final JavaProgramArguments getSysArgs() {
+		return sysArgs;
+	}
 	
 	public static final File getClassPathJarFile() {
 		return JavaProgramArguments.getClassPathJarFile();
@@ -257,6 +266,7 @@ public final class Main {
 	protected static MenuItem									mntmTrayIconAlways;
 	protected static MenuItem									mntmRestartServerAutomatically;
 	protected static MenuItem									mntmSendServerInfo;
+	protected static MenuItem									mntmCheckForUpdates;
 	protected static MenuItem									mntmOpenServerFolder;
 	protected static MenuItem									mntmEnableScheduledRestarts;
 	protected static Button										btnSendInput;
@@ -555,6 +565,10 @@ public final class Main {
 		if(Main.trayIcon != null) {
 			Main.trayIcon.setImage(images[0]);
 		}
+	}
+	
+	public static final String getShellTitle() {
+		return Main.shell.getText();
 	}
 	
 	public static final Image[] getShellImages() {
@@ -943,7 +957,7 @@ public final class Main {
 		}
 	}
 	
-	protected static final boolean loadSettings() {
+	public static final boolean loadSettings() {
 		if(!settingsFile.exists()) {
 			return Main.saveSettings();
 		}
@@ -1122,7 +1136,7 @@ public final class Main {
 		}
 	}
 	
-	protected static final boolean saveSettings() {
+	public static final boolean saveSettings() {
 		try(PrintWriter pr = new PrintWriter(new OutputStreamWriter(new FileOutputStream(settingsFile), StandardCharsets.UTF_8), true)) {
 			pr.println("# Console font settings:");
 			pr.println("fontName=" + Main.consoleFontName);
@@ -1664,6 +1678,35 @@ public final class Main {
 		});
 		mntmSendServerInfo.setSelection(true);
 		mntmSendServerInfo.setText("Send server info to clients");
+		
+		mntmCheckForUpdates = new MenuItem(menu, SWT.NONE);
+		mntmCheckForUpdates.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				UpdateResult result = new UpdateCheckerDialog(shell).open();
+				if(result.type == UpdateType.AVAILABLE) {
+					File check = Main.getClassPathJarFile();
+					if(check.getName().endsWith(".class")) {
+						new PopupDialog(shell, "Update Results", "Heya! It looks like you're running this in a development environment.\r\nI can't overwrite a .jar if there isn't one!\r\nDisplaying normal output:\r\n\r\nThere is an update available!\r\nSize to download: " + Functions.humanReadableByteCount(result.fileSize, true, 2)).open();
+					} else {
+						PromptDownloadUpdateDialog dialog = new PromptDownloadUpdateDialog(shell);
+						Response response = dialog.open("There is an update available!\r\nSize to download: " + Functions.humanReadableByteCount(result.fileSize, true, 2));
+						if(response == Response.YES) {
+							new PerformUpdateDialog(shell).open();
+							//we're still here?!
+							new PopupDialog(shell, "Update Warning", "Automatic update seems to have failed.\r\nYou may need to close and re-open this client.").open();
+						}
+					}
+				} else if(result.type == UpdateType.UP_TO_DATE) {
+					new PopupDialog(shell, "Update Results", "You are running the latest version of ServerWrapper.").open();
+				} else if(result.type == UpdateType.NO_CONNECTION) {
+					new PopupDialog(shell, "Update Results", "Unable to contact the update server; is the server down?\r\n\r\nPlease try again later.").open();
+				} else {
+					new PopupDialog(shell, "Update Results", "Unable to check for updates: An unknown error occurred.").open();
+				}
+			}
+		});
+		mntmCheckForUpdates.setText("Check for Updates...");
 		
 		mntmabout = new MenuItem(menu, SWT.NONE);
 		mntmabout.addSelectionListener(new SelectionAdapter() {
