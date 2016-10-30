@@ -234,7 +234,6 @@ public class UpdateChecker {
 						}
 						if(dialog != null) {
 							dialog.progress.setValue(Double.valueOf(dialog.progress.getValue().doubleValue() + 12.0D));
-							dialog.runLoop();
 						}
 					}
 					if(responseCode != null && responseCode.contains("200") && StringUtil.isStrInt(contentLength)) {
@@ -258,7 +257,6 @@ public class UpdateChecker {
 							remaining = size - count;
 							if(dialog != null) {
 								dialog.progress.setValue(Double.valueOf(((count + 0.0D) / (size + 0.0D)) * 100.00D));
-								dialog.runLoop();
 							}
 						}
 						data.data = baos.getBytesAndDispose();

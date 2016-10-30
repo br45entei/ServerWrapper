@@ -1692,9 +1692,11 @@ public final class Main {
 						PromptDownloadUpdateDialog dialog = new PromptDownloadUpdateDialog(shell);
 						Response response = dialog.open("There is an update available!\r\nSize to download: " + Functions.humanReadableByteCount(result.fileSize, true, 2));
 						if(response == Response.YES) {
-							new PerformUpdateDialog(shell).open();
+							boolean allGood = new PerformUpdateDialog(shell).open();
 							//we're still here?!
-							new PopupDialog(shell, "Update Warning", "Automatic update seems to have failed.\r\nYou may need to close and re-open this client.").open();
+							if(!allGood) {
+								new PopupDialog(shell, "Update Warning", "Automatic update seems to have failed.\r\nYou may need to close and re-open this ServerWrapper, or even re-download it!").open();
+							}
 						}
 					}
 				} else if(result.type == UpdateType.UP_TO_DATE) {
