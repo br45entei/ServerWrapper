@@ -1174,7 +1174,7 @@ public final class Main {
 		}
 	}
 	
-	protected static final void appendLog(String str) {
+	public static final void appendLog(String str) {
 		boolean sendToClients = !str.startsWith("==");
 		if(!sendToClients) {
 			str = str.substring(2);
@@ -1342,7 +1342,9 @@ public final class Main {
 		noConnectedClientsMsg.setBounds(10, 10, contentArea.getSize().x - 35, 30);//455, 30);
 		noConnectedClientsMsg.setText(noConnText);
 		
-		//ConnectedClientsComposite test = new ConnectedClientsComposite(contentArea, null, "ipAddress", "Nickname");
+		/*contentArea.setSize(480, 70);//XXX Test code for window builder, comment me!
+		ConnectedClientsComposite test = new ConnectedClientsComposite(contentArea, RemoteClient.consoleClient, "ipAddress", "Nickname");
+		test.setSize(475, test.getSize().y);*/
 		
 		final KeyAdapter inputKeyAdapter = new KeyAdapter() {
 			@Override
@@ -1594,6 +1596,11 @@ public final class Main {
 					}
 					System.gc();
 				}
+				for(Credential user : savedCredentials) {
+					for(RemoteClient client : RemoteClient.getClientsWithUsername(user.username)) {
+						client.setUserPermissions(user.permissions);
+					}
+				}
 			}
 		});
 		mntmManageCredentials.setText("Manage Credentials...");
@@ -1692,6 +1699,8 @@ public final class Main {
 						PromptDownloadUpdateDialog dialog = new PromptDownloadUpdateDialog(shell);
 						Response response = dialog.open("There is an update available!\r\nSize to download: " + Functions.humanReadableByteCount(result.fileSize, true, 2));
 						if(response == Response.YES) {
+							stopServer(null, false);
+							waitUntilProcessEnded();
 							boolean allGood = new PerformUpdateDialog(shell).open();
 							//we're still here?!
 							if(!allGood) {
@@ -2020,6 +2029,11 @@ public final class Main {
 	
 	public static final File getServerFolder() {
 		return isServerJarSelected() ? Main.serverJar.getParentFile() : null;
+	}
+	
+	public static final File getServerFolderSafe() {
+		File serverFolder = Main.getServerFolder();
+		return(serverFolder != null ? serverFolder : Main.rootDir);
 	}
 	
 	public static final boolean isProcessAlive() {
@@ -2407,7 +2421,7 @@ public final class Main {
 			this.client = client;
 			this.ipAddress = ipAddress;
 			this.nickName = nickName;
-			this.setBounds(10, 10, contentArea.getSize().x - 35, ySize);
+			this.setBounds(10, 10, parent.getSize().x - 35, ySize);
 			
 			Label lblIpAddress = new Label(this, SWT.NONE);
 			lblIpAddress.setBounds(10, 10, 66, 13);

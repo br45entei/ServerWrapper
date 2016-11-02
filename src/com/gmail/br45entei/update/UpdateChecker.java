@@ -119,10 +119,12 @@ public class UpdateChecker {
 					if(dialog != null) {
 						dialog.isConnected.setValue(Boolean.TRUE);
 					}
-					server.setSoTimeout(2000);
+					server.setSoTimeout(10000);
 					server.setKeepAlive(true);
 					PrintWriter pr = new PrintWriter(new OutputStreamWriter(server.getOutputStream(), StandardCharsets.UTF_8), true);
-					pr.println("HEAD " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis()));
+					final String request = "HEAD " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis());
+					System.out.println("\r\nRequest:\r\n" + request + "\r\n\r\nResponse:");
+					pr.println(request);
 					pr.flush();
 					if(dialog != null) {
 						dialog.progress.setValue(Double.valueOf(10));
@@ -136,6 +138,7 @@ public class UpdateChecker {
 						if(line.isEmpty()) {
 							break;
 						}
+						System.out.println(line);
 						if(firstLine) {
 							firstLine = false;
 							responseCode = line;
@@ -164,6 +167,10 @@ public class UpdateChecker {
 						return;
 					} else if(responseCode != null && responseCode.contains("304")) {
 						result.setValue(new UpdateResult(UpdateType.UP_TO_DATE, -1));
+						return;
+					} else if(responseCode != null) {
+						System.err.println("Unknown update server response: " + responseCode);
+						result.setValue(new UpdateResult(UpdateType.UNKNOWN, StringUtil.isStrInt(contentLength) ? Integer.parseInt(contentLength) : -1));
 						return;
 					}
 					try {
@@ -210,10 +217,12 @@ public class UpdateChecker {
 					SocketAddress address = new InetSocketAddress(getDownloadIP(), 80);
 					Socket server = new Socket();
 					server.connect(address, 2000);
-					server.setSoTimeout(2000);
+					server.setSoTimeout(10000);
 					server.setKeepAlive(true);
 					PrintWriter pr = new PrintWriter(new OutputStreamWriter(server.getOutputStream(), StandardCharsets.UTF_8), true);
-					pr.println("GET " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis()));
+					final String request = "GET " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis());
+					System.out.println("\r\nRequest:\r\n" + request + "\r\n\r\nResponse:");
+					pr.println(request);
 					pr.flush();
 					InputStream in = server.getInputStream();
 					String responseCode = null;
@@ -224,6 +233,7 @@ public class UpdateChecker {
 						if(line.isEmpty()) {
 							break;
 						}
+						System.out.println(line);
 						if(firstLine) {
 							firstLine = false;
 							responseCode = line;
@@ -237,6 +247,9 @@ public class UpdateChecker {
 						}
 					}
 					if(responseCode != null && responseCode.contains("200") && StringUtil.isStrInt(contentLength)) {
+						if(dialog != null) {
+							dialog.progress.setValue(Double.valueOf(0.00D));
+						}
 						final int size = Integer.parseInt(contentLength);
 						DisposableByteArrayOutputStream baos = new DisposableByteArrayOutputStream();
 						int count = 0;
@@ -248,6 +261,9 @@ public class UpdateChecker {
 						remaining = size - count;
 						while(remaining > 0) {
 							remaining = size - count;
+							if(remaining <= 0) {
+								break;
+							}
 							read = in.read(buf, 0, Math.min(buf.length, remaining));
 							if(read == -1) {
 								break;

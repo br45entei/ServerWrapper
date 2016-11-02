@@ -36,7 +36,7 @@ public class PerformUpdateDialog extends Dialog {
 	protected Shell						shell;
 	public final Property<Double>		progress				= new Property<>("Progress");
 	private ProgressBar					progressBar;
-	private Label						lblUploadingFile;
+	protected Label						lblUploadingFile;
 	
 	/** Create the dialog. */
 	public PerformUpdateDialog(Shell parent) {
@@ -75,14 +75,19 @@ public class PerformUpdateDialog extends Dialog {
 				final Runtime runtime = Runtime.getRuntime();
 				final FileData backup = getBackup;
 				final Property<Throwable> exception = new Property<>("Thrown Error");
+				final PerformUpdateDialog THIS = this;
 				Thread updateThread = new Thread(new Runnable() {
 					@Override
 					public final void run() {
 						try(FileOutputStream out = new FileOutputStream(check)) {
+							final int size = data.data.length;
+							long count = 0;
 							byte[] b = new byte[4096];
 							int len;
 							while((len = fis.read(b)) >= 0) {
 								out.write(b, 0, len);
+								count += len;
+								THIS.progress.setValue(Double.valueOf(((count + 0.0D) / (size + 0.0D)) * 100.00D));
 							}
 							out.flush();
 							try {
@@ -99,6 +104,11 @@ public class PerformUpdateDialog extends Dialog {
 							e.printStackTrace();
 							exception.setValue(e);
 							if(backup != null) {
+								try {
+									THIS.lblUploadingFile.setText("Update failed. Rolling back changes...");
+								} catch(NoClassDefFoundError ignored) {
+								}
+								THIS.progress.setValue(Double.valueOf(0.00D));
 								try(FileOutputStream out = new FileOutputStream(check)) {
 									out.write(backup.data);
 									out.flush();
@@ -131,7 +141,8 @@ public class PerformUpdateDialog extends Dialog {
 				}
 			}
 		} else {
-			new PopupDialog(this.getParent(), "Failed to download update", "Downloaded file size is 0 bytes?!").open();
+			new PopupDialog(this.getParent(), "Failed to download update", "The updater connected to the download server successfully, but was unable to download the update.\r\nPlease try again.\r\nIf the issue persists, try updating manually.").open();//Downloaded file size is 0 bytes?!").open();
+			restoredJarFile.setValue(Boolean.TRUE);//stops warning about potentially corrupted jar showing, since we didn't even modify the jar at this point
 		}
 		if(!this.shell.isDisposed()) {
 			this.shell.dispose();
@@ -139,11 +150,32 @@ public class PerformUpdateDialog extends Dialog {
 		return restoredJarFile.getValue() == null ? false : restoredJarFile.getValue().booleanValue();
 	}
 	
-	/** @throws ClassNotFoundException not unused */
-	private final void runLoop_() throws ClassNotFoundException {
+	private final void runLoop_() throws NoClassDefFoundError {
 		try {
 			Main.mainLoop();
-			this.updateUI();
+		} catch(Throwable e) {
+			if(e instanceof SWTException || e instanceof SWTError) {
+				e.printStackTrace();
+			}
+		}
+		this.updateUI();
+	}
+	
+	public final void runLoop() {
+		try {
+			this.runLoop_();
+		} catch(NoClassDefFoundError ignored) {
+		}
+	}
+	
+	private final void updateUI_() throws NoClassDefFoundError {
+		try {
+			int selection = (int) Math.round(this.progress.getValue().doubleValue() * 100.00D);
+			if(this.progressBar.getSelection() != selection) {
+				this.progressBar.setSelection(selection);
+			}
+			Functions.setShellImages(this.shell, Main.getShellImages());
+			Functions.setTextFor(this.shell, "Update check progress - " + this.getParent().getText());
 		} catch(Throwable e) {
 			if(e instanceof SWTException || e instanceof SWTError) {
 				e.printStackTrace();
@@ -151,20 +183,11 @@ public class PerformUpdateDialog extends Dialog {
 		}
 	}
 	
-	public final void runLoop() {
-		try {
-			this.runLoop_();
-		} catch(ClassNotFoundException ignored) {
-		}
-	}
-	
 	private final void updateUI() {
-		int selection = (int) Math.round(this.progress.getValue().doubleValue() * 100.00D);
-		if(this.progressBar.getSelection() != selection) {
-			this.progressBar.setSelection(selection);
+		try {
+			this.updateUI_();
+		} catch(NoClassDefFoundError ignored) {
 		}
-		Functions.setShellImages(this.shell, Main.getShellImages());
-		Functions.setTextFor(this.shell, "Update check progress - " + this.getParent().getText());
 	}
 	
 	/** Create contents of the dialog. */

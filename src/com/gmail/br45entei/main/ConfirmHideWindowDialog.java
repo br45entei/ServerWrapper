@@ -1,6 +1,3 @@
-/**
- * 
- */
 package com.gmail.br45entei.main;
 
 import com.gmail.br45entei.swt.Functions;

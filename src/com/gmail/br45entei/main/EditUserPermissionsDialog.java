@@ -13,8 +13,11 @@ import org.eclipse.swt.events.TraverseEvent;
 import org.eclipse.swt.events.TraverseListener;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Dialog;
+import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.Text;
 
 /** @author Brian_Entei */
 @SuppressWarnings("javadoc")
@@ -29,8 +32,11 @@ public class EditUserPermissionsDialog extends Dialog {
 	protected Button				btnCanModifyFiles;
 	protected Button				btnCanDeleteFiles;
 	protected Button				btnCanDownloadFiles;
+	protected Text					txtRootdir;
+	private Button					btnSetRootDir;
 	
 	public final UserPermissions	permissions;
+	private Button					btnSetToDefault;
 	
 	/** Create the dialog.
 	 * 
@@ -79,12 +85,13 @@ public class EditUserPermissionsDialog extends Dialog {
 		Functions.setSelectionFor(this.btnCanModifyFiles, this.permissions.canModifyFiles);
 		Functions.setSelectionFor(this.btnCanDeleteFiles, this.permissions.canDeleteFiles);
 		Functions.setSelectionFor(this.btnCanDownloadFiles, this.permissions.canDownloadFiles);
+		Functions.setTextFor(this.txtRootdir, this.permissions.rootFTDir);
 	}
 	
 	/** Create contents of the dialog. */
 	private void createContents() {
 		this.shell = new Shell(getParent(), SWT.CLOSE | SWT.TITLE | SWT.PRIMARY_MODAL);
-		this.shell.setSize(283, 137);
+		this.shell.setSize(283, 192);
 		this.shell.addTraverseListener(new TraverseListener() {
 			@Override
 			public void keyTraversed(TraverseEvent e) {
@@ -177,9 +184,38 @@ public class EditUserPermissionsDialog extends Dialog {
 				EditUserPermissionsDialog.this.result = Response.DONE;
 			}
 		});
-		btnDone.setBounds(10, 76, 256, 23);
+		btnDone.setBounds(10, 134, 256, 23);
 		btnDone.setText("Done");
 		
+		Label lblUserFtRoot = new Label(this.shell, SWT.NONE);
+		lblUserFtRoot.setBounds(10, 76, 93, 23);
+		lblUserFtRoot.setText("User FT root dir:");
+		
+		this.txtRootdir = new Text(this.shell, SWT.BORDER | SWT.READ_ONLY);
+		this.txtRootdir.setBounds(10, 105, 256, 23);
+		
+		this.btnSetRootDir = new Button(this.shell, SWT.NONE);
+		this.btnSetRootDir.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				DirectoryDialog dialog = new DirectoryDialog(EditUserPermissionsDialog.this.shell);
+				dialog.setFilterPath(EditUserPermissionsDialog.this.permissions.rootFTDir);
+				String path = dialog.open();
+				EditUserPermissionsDialog.this.permissions.rootFTDir = path != null ? path : EditUserPermissionsDialog.this.txtRootdir.getText();
+			}
+		});
+		this.btnSetRootDir.setBounds(109, 76, 75, 23);
+		this.btnSetRootDir.setText("Set root dir...");
+		
+		this.btnSetToDefault = new Button(this.shell, SWT.NONE);
+		this.btnSetToDefault.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				EditUserPermissionsDialog.this.permissions.rootFTDir = Main.getServerFolderSafe().getAbsolutePath();
+			}
+		});
+		this.btnSetToDefault.setBounds(190, 76, 75, 23);
+		this.btnSetToDefault.setText("Set to default");
+		
 	}
-	
 }

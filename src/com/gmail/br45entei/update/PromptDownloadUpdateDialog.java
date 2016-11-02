@@ -1,6 +1,3 @@
-/**
- * 
- */
 package com.gmail.br45entei.update;
 
 import com.gmail.br45entei.main.Main;
@@ -79,7 +76,7 @@ public class PromptDownloadUpdateDialog extends Dialog {
 			}
 		});
 		this.shell.setSize(387, 172);
-		this.shell.setText("Confirm delete local files - " + Main.getShellTitle());
+		this.shell.setText("Update available - " + Main.getShellTitle());
 		this.shell.setImages(Main.getShellImages());
 		Functions.centerShell2OnShell1(this.getParent(), this.shell);
 		

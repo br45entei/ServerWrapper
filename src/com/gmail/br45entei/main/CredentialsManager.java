@@ -55,7 +55,7 @@ public class CredentialsManager extends Dialog {
 	
 	public static final class Credential {
 		
-		public static final Credential fullAccessUser = new Credential("", "", new UserPermissions(true));
+		public static final Credential fullAccessUser = new Credential("", "", new UserPermissions(true, ""));
 		
 		private static final String getFileNameFor(String username) {
 			if(username != null) {
@@ -122,6 +122,8 @@ public class CredentialsManager extends Dialog {
 				pr.println("canDeleteFiles=" + this.permissions.canDeleteFiles);
 				pr.println("canDownloadFiles=" + this.permissions.canDownloadFiles);
 				pr.println("");
+				pr.println("rootFTDir=" + this.permissions.rootFTDir);
+				pr.println("");
 				pr.flush();
 			} catch(Throwable e) {
 				e.printStackTrace();
@@ -135,7 +137,7 @@ public class CredentialsManager extends Dialog {
 				return null;
 			}
 			Credential user = new Credential();
-			user.permissions = new UserPermissions();
+			user.permissions = new UserPermissions(Main.getServerFolderSafe().getAbsolutePath());
 			user.loadFromFile(file);
 			return user;
 		}
@@ -152,6 +154,9 @@ public class CredentialsManager extends Dialog {
 				final String regex = Pattern.quote("=");
 				while(br.ready()) {
 					String line = br.readLine();
+					if(line.isEmpty() || line.startsWith("#")) {
+						continue;
+					}
 					String[] split = line.split(regex);
 					String param = split[0];
 					String value = StringUtil.stringArrayToString(split, '=', 1);
@@ -172,6 +177,8 @@ public class CredentialsManager extends Dialog {
 						this.permissions.canDeleteFiles = boolVal;
 					} else if(param.equalsIgnoreCase("canDownloadFiles")) {
 						this.permissions.canDownloadFiles = boolVal;
+					} else if(param.equalsIgnoreCase("rootFTDir")) {
+						this.permissions.rootFTDir = value;
 					}
 				}
 			} catch(Throwable e) {
@@ -347,21 +354,24 @@ public class CredentialsManager extends Dialog {
 		public volatile boolean	canDeleteFiles;
 		public volatile boolean	canDownloadFiles;
 		
-		public UserPermissions() {
-			this(false);
+		public volatile String	rootFTDir;
+		
+		public UserPermissions(String rootFTDir) {
+			this(false, rootFTDir);
 		}
 		
-		public UserPermissions(boolean allPerms) {
-			this(allPerms, allPerms, allPerms, allPerms, allPerms, allPerms);
+		public UserPermissions(boolean allPerms, String rootFTDir) {
+			this(allPerms, allPerms, allPerms, allPerms, allPerms, allPerms, rootFTDir);
 		}
 		
-		public UserPermissions(boolean allowConsoleAccess, boolean canRestartServer, boolean canStopServer, boolean canModifyFiles, boolean canDeleteFiles, boolean canDownloadFiles) {
+		public UserPermissions(boolean allowConsoleAccess, boolean canRestartServer, boolean canStopServer, boolean canModifyFiles, boolean canDeleteFiles, boolean canDownloadFiles, String rootFTDir) {
 			this.allowConsoleAccess = allowConsoleAccess;
 			this.canRestartServer = canRestartServer;
 			this.canStopServer = canStopServer;
 			this.canModifyFiles = canModifyFiles;
 			this.canDeleteFiles = canDeleteFiles;
 			this.canDownloadFiles = canDownloadFiles;
+			this.rootFTDir = rootFTDir;
 		}
 		
 	}
@@ -384,7 +394,7 @@ public class CredentialsManager extends Dialog {
 		public CreateNewCredentialComposite(Composite parent, CredentialsManager manager) {
 			super(parent, SWT.NORMAL);
 			this.manager = manager;
-			this.permissions = new UserPermissions(false);
+			this.permissions = new UserPermissions(false, Main.getServerFolderSafe().getAbsolutePath());
 			this.setSize(450, CredentialComposite.ySize);
 			
 			this.lblUsername = new Label(this, SWT.NONE);
@@ -410,7 +420,7 @@ public class CredentialsManager extends Dialog {
 							manager.credentials.add(user);
 							CreateNewCredentialComposite.this.username.setText("");
 							CreateNewCredentialComposite.this.password.setText("");
-							CreateNewCredentialComposite.this.permissions = new UserPermissions(false);
+							CreateNewCredentialComposite.this.permissions = new UserPermissions(false, Main.getServerFolderSafe().getAbsolutePath());
 						}
 					}
 				}

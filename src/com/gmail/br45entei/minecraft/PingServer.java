@@ -1,6 +1,3 @@
-/**
- * 
- */
 package com.gmail.br45entei.minecraft;
 
 import com.gmail.br45entei.data.DisposableByteArrayOutputStream;

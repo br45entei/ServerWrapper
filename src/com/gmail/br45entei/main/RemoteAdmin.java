@@ -43,7 +43,7 @@ public class RemoteAdmin {
 	
 	public static final String				PROTOCOL_NAME				= "RemAdmin";
 	public static final String				PROTOCOL_DELIMITER			= "/";
-	public static final String				PROTOCOL_VERSION			= "1.02";
+	public static final String				PROTOCOL_VERSION			= "1.02.1";
 	
 	/** This application's networking protocol */
 	public static final String				PROTOCOL					= PROTOCOL_NAME + PROTOCOL_DELIMITER + PROTOCOL_VERSION;
@@ -220,6 +220,7 @@ public class RemoteAdmin {
 											if(args.length == 3) {
 												client.println(PROTOCOL + " 42 PASS");
 												client.setConnectionType("NORMAL");
+												client.setUserPermissions(user.permissions);
 												client.startSendingLogs();
 												Main.appendLog("User \"" + client.getDisplayName(true) + "\" logged in.");
 												while(!client.socket.isClosed()) {
@@ -257,12 +258,17 @@ public class RemoteAdmin {
 													} else {
 														if(RemoteClient.isConnected(username, client.getIpAddress())) {
 															client.println(PROTOCOL + " 43 FILETRANSFER CONNECTION ESTABLISHED");
+															String rootPath = user.permissions.rootFTDir;
+															rootPath = rootPath.endsWith(File.separator) ? rootPath.substring(0, rootPath.length() - File.separator.length()) : rootPath;
+															rootPath = rootPath.replace(":", ";");
+															client.println("ROOTNAME: " + FilenameUtils.getName(rootPath));
 															@SuppressWarnings("resource")
 															RemoteClient clientUser = RemoteClient.getFromFTConnection(client);
 															if(clientUser != null) {
 																clientUser.ftConnection = client;
 																RemoteClient.instances.remove(client);
 																Main.appendLog("User \"" + client.getDisplayName(true) + "\" file transfer connection established.");
+																client.setUserPermissions(user.permissions);
 																while(!client.socket.isClosed()) {
 																	try {
 																		if(!handleRemoteAdminFileTransferData(clientUser, user)) {
@@ -296,8 +302,12 @@ public class RemoteAdmin {
 									} else {
 										double serverVersion = Double.valueOf(PROTOCOL_VERSION).doubleValue();
 										double clientVrsn = -1;
-										if(StringUtil.isStrDouble(clientVersion)) {
-											clientVrsn = Double.valueOf(clientVersion).doubleValue();
+										String clientVersionDouble = clientVersion;
+										if(clientVersion.indexOf(".") != clientVersion.lastIndexOf(".")) {
+											clientVersionDouble = StringUtil.stringArrayToString(clientVersion.split(Pattern.quote(".")), "", 0);
+										}
+										if(StringUtil.isStrDouble(clientVersionDouble)) {
+											clientVrsn = Double.valueOf(clientVersionDouble).doubleValue();
 										}
 										final boolean clientOutdated = serverVersion > clientVrsn;
 										client.out.println(PROTOCOL + " 2 Version Mismatch: " + (clientOutdated ? "Client out of date!" : "Server out of date!"));
@@ -351,29 +361,42 @@ public class RemoteAdmin {
 		System.out.println("path exists: " + getFileFromRelativePath(path).exists());
 	}*/
 	
-	public static final File getFileFromRelativePath(String path) {
-		File serverFolder = Main.getServerFolder();
-		if(serverFolder == null) {
+	public static final File getFileFromRelativePath(File root, String path) {
+		if(root == null) {
 			return null;
 		}
 		if(path.equals("/")) {
-			return serverFolder;
+			return root;
 		}
-		return new File(serverFolder, path.replace("/", File.separator));
+		return new File(root, path.replace("/", File.separator));
 	}
 	
-	public static final String getPathRelativeToServerFolder(File file) {
+	public static final String getPathRelativeToServerFolder(File file) {//Currently unused, may be needed later
+		return getPathRelativeTo(Main.getServerFolder(), file);
+	}
+	
+	public static final void main(String[] args) {
+		File root = new File("E:/Java/Git/ServerWrapper/wrkDir/");
+		File file = new File("E:/Java/Git/ServerWrapper/wrkDir");
+		System.out.println(getPathRelativeTo(root, file));
+	}
+	
+	public static final String getPathRelativeTo(File root, File file) {
 		if(file == null || !file.exists()) {
 			return file == null ? "null" : "/";
 		}
-		File serverFolder = Main.getServerFolder();
-		if(serverFolder == null) {
+		if(root == null) {
 			return "NO JAR SELECTED";
 		}
-		if(serverFolder.getAbsolutePath().equalsIgnoreCase(file.getAbsolutePath())) {
+		/*String rootPath = root.getAbsolutePath();
+		String filePath = file.getAbsolutePath();
+		System.out.println("rootPath: " + rootPath);
+		System.out.println("filePath: " + filePath);
+		System.out.println("equals: " + rootPath.equalsIgnoreCase(filePath));*/
+		if(root.getAbsolutePath().equalsIgnoreCase(file.getAbsolutePath())) {
 			return "/";
 		}
-		String dir = file.getAbsolutePath().replace(serverFolder.getAbsolutePath(), "").replace("\\", "/");
+		String dir = file.getAbsolutePath().replace(root.getAbsolutePath(), "").replace("\\", "/");
 		if(!dir.startsWith("/")) {
 			dir = "/" + dir;
 		}
@@ -389,11 +412,11 @@ public class RemoteAdmin {
 		}
 		user = user == null ? Credential.fullAccessUser : user;
 		boolean continueData = true;
-		if(!client.ftConnection.currentFTDir.getAbsolutePath().toLowerCase().startsWith(Main.getServerFolder().getAbsolutePath().toLowerCase())) {
-			client.ftConnection.currentFTDir = Main.getServerFolder();
+		if(!client.ftConnection.currentFTDir.getAbsolutePath().toLowerCase().startsWith(client.ftConnection.rootFTDir.getAbsolutePath().toLowerCase())) {
+			client.ftConnection.currentFTDir = client.ftConnection.rootFTDir;
 			client.ftConnection.listFiles();
 		}
-		final boolean isDirHomeDir = getPathRelativeToServerFolder(client.ftConnection.currentFTDir).equals("/");
+		final boolean isDirHomeDir = getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir).equals("/");
 		String line = StringUtil.readLine(client.ftConnection.in);
 		if(line == null || line.equals(PROTOCOL + " -1 CLOSE")) {
 			return false;
@@ -404,7 +427,7 @@ public class RemoteAdmin {
 				return continueData;
 			}
 			final File oldDir = client.ftConnection.currentFTDir;
-			client.ftConnection.currentFTDir = Main.getServerFolder();
+			client.ftConnection.currentFTDir = client.ftConnection.rootFTDir;
 			//client.ftConnection.println("DIR: /");
 			ConcurrentLinkedDeque<File[]> queue = new ConcurrentLinkedDeque<>();
 			ConcurrentLinkedDeque<File[]> queue1 = new ConcurrentLinkedDeque<>();
@@ -440,7 +463,7 @@ public class RemoteAdmin {
 							continue;
 						}
 						client.ftConnection.println("GETALLFILES: " + percentComplete + " " + file.getName());
-						client.ftConnection.println("MKDIR: " + getPathRelativeToServerFolder(file));
+						client.ftConnection.println("MKDIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, file));
 						continue;
 					}
 					if(!Files.isReadable(Paths.get(file.toURI())) || (homeDir && file.getName().equalsIgnoreCase("settings.txt"))) {
@@ -448,7 +471,7 @@ public class RemoteAdmin {
 					}
 					client.ftConnection.println("GETALLFILES: " + percentComplete + " " + file.getName());
 					client.ftConnection.currentFTDir = file.getParentFile();
-					String path = getPathRelativeToServerFolder(client.ftConnection.currentFTDir);
+					String path = getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir);
 					client.ftConnection.println("DIR: " + path);
 					client.ftConnection.println("FILE");
 					FileTransfer.sendFile(file, client.ftConnection.outStream, null);
@@ -489,7 +512,7 @@ public class RemoteAdmin {
 				data = null;
 				System.gc();
 				client.ftConnection.listFiles();
-				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" " + (existedBefore ? "AMENDED" : "CREATED") + " file \"" + getPathRelativeToServerFolder(file) + "\";");
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" " + (existedBefore ? "AMENDED" : "CREATED") + " file \"" + getPathRelativeTo(client.ftConnection.rootFTDir, file) + "\";");
 			} else {
 				client.sendPopupMessage("You do not have permission to modify server files." + (!user.permissions.canDeleteFiles ? "\r\n\r\n('Delete' is also a required permission when creating files and folders.)" : ""));
 			}
@@ -499,7 +522,7 @@ public class RemoteAdmin {
 				return continueData;
 			}
 			String path = line.substring("GETFILE: ".length());
-			File file = getFileFromRelativePath(path);
+			File file = getFileFromRelativePath(client.ftConnection.rootFTDir, path);
 			if(!file.isFile()) {
 				client.ftConnection.println(PROTOCOL + " 45 FILE NOT EXIST OR IS DIRECTORY");
 				return continueData;
@@ -510,21 +533,21 @@ public class RemoteAdmin {
 			}
 			client.ftConnection.println("FILE");
 			FileTransfer.sendFile(file, client.ftConnection.outStream, null);
-			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded file \"" + getPathRelativeToServerFolder(file) + "\";");
+			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded file \"" + getPathRelativeTo(client.ftConnection.rootFTDir, file) + "\";");
 		} else if(line.equals("DIR")) {
-			client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(client.ftConnection.currentFTDir));
+			client.ftConnection.println("DIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir));
 		} else if(line.startsWith("DIR: ")) {
 			String path = line.substring("DIR: ".length());
 			if(path.equals("../")) {
-				path = getPathRelativeToServerFolder(client.ftConnection.currentFTDir).equals("/") ? "/" : getPathRelativeToServerFolder(client.ftConnection.currentFTDir.getParentFile());
+				path = getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir).equals("/") ? "/" : getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir.getParentFile());
 			}
 			if(path.endsWith("./")) {
 				path = FilenameUtils.normalize(path);
 			}
-			File check = getFileFromRelativePath(path);
+			File check = getFileFromRelativePath(client.ftConnection.rootFTDir, path);
 			if(check.isDirectory()) {
 				client.ftConnection.currentFTDir = check;
-				client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(client.ftConnection.currentFTDir));
+				client.ftConnection.println("DIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, client.ftConnection.currentFTDir));
 				client.ftConnection.listFiles();
 			} else {
 				client.ftConnection.println("DIR: INVALID_PATH '" + path + "'");
@@ -537,7 +560,7 @@ public class RemoteAdmin {
 				return continueData;
 			}
 			String deletePath = line.substring("DELETE: ".length());
-			File file = getFileFromRelativePath(deletePath);
+			File file = getFileFromRelativePath(client.ftConnection.rootFTDir, deletePath);
 			if(!file.exists()) {
 				client.ftConnection.println(PROTOCOL + " 46 FILESYSTEM OBJECT NOT EXIST");
 				client.ftConnection.listFiles();
@@ -566,7 +589,7 @@ public class RemoteAdmin {
 				return continueData;
 			}
 			if(StringUtil.isFileSystemSafe(renameTo)) {
-				File file = getFileFromRelativePath(renamePath);
+				File file = getFileFromRelativePath(client.ftConnection.rootFTDir, renamePath);
 				if(!file.exists()) {
 					client.ftConnection.println(PROTOCOL + " 46 FILESYSTEM OBJECT NOT EXIST");
 					client.ftConnection.listFiles();
@@ -635,7 +658,7 @@ public class RemoteAdmin {
 			} else {
 				client.sendPopupMessage("The file name \"" + newFolderName + "\" is not filesystem safe.\r\nPlease remove any invalid characters and try again.");
 			}
-		} else if(line.startsWith("MKDIRGODIR: ")) {
+		} else if(line.startsWith("MKDIRGODIR: ")) {//i.e. a relative path to the client's current dir
 			if(!(user.permissions.canModifyFiles && user.permissions.canDeleteFiles)) {
 				client.sendPopupMessage("You do not have permission to modify server files." + (!user.permissions.canDeleteFiles ? "\r\n\r\n('Delete' is also a required permission when creating files and folders.)" : ""));
 				return continueData;
@@ -644,12 +667,11 @@ public class RemoteAdmin {
 			if(newFolderName.isEmpty() || newFolderName.equals("null")) {
 				return continueData;
 			}
-			//if(StringUtil.isFileSystemSafe(newFolderName)) {
 			File parent = client.currentFTDir;
 			File check = new File(parent + File.separator + newFolderName.replace("/", File.separator));
 			if(check.exists()) {
 				client.ftConnection.currentFTDir = check;
-				client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
+				client.ftConnection.println("DIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, check));
 				return continueData;
 			}
 			if(!check.mkdirs()) {
@@ -657,18 +679,40 @@ public class RemoteAdmin {
 			} else {
 				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + newFolderName + "\";");
 				client.ftConnection.currentFTDir = check;
-				client.ftConnection.println("DIR: " + getPathRelativeToServerFolder(check));
+				client.ftConnection.println("DIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, check));
 			}
-			//} else {
-			//	client.sendPopupMessage("The file name \"" + newFolderName + "\" is not filesystem safe.\r\nPlease remove any invalid characters and try again.");
-			//}
+		} else if(line.startsWith("MKDIRGODIRFULL: ")) {//i.e. not a relative path, but the full path
+			if(!(user.permissions.canModifyFiles && user.permissions.canDeleteFiles)) {
+				client.sendPopupMessage("You do not have permission to modify server files." + (!user.permissions.canDeleteFiles ? "\r\n\r\n('Delete' is also a required permission when creating files and folders.)" : ""));
+				return continueData;
+			}
+			String newFolderPath = line.substring("MKDIRGODIRFULL: ".length());
+			if(newFolderPath.isEmpty() || newFolderPath.equals("null")) {
+				return continueData;
+			}
+			File parent = client.ftConnection.rootFTDir;
+			newFolderPath = newFolderPath.substring((newFolderPath.startsWith("/") ? 1 : 0), newFolderPath.length() - (newFolderPath.endsWith("/") ? 1 : 0));
+			File check = new File(parent + File.separator + newFolderPath.replace("/", File.separator));
+			if(check.exists()) {
+				client.ftConnection.currentFTDir = check;
+				client.ftConnection.println("DIR: " + getPathRelativeTo(client.ftConnection.rootFTDir, check));
+				return continueData;
+			}
+			if(!check.mkdirs()) {
+				client.sendPopupMessage("An unknown error occurred when creating the new folder \"" + check.getName() + "\".\r\nPlease try again.");
+			} else {
+				String folderPath = getPathRelativeTo(client.ftConnection.rootFTDir, check);
+				Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" CREATED folder \"" + folderPath + "\";");
+				client.ftConnection.currentFTDir = check;
+				client.ftConnection.println("DIR: " + folderPath);
+			}
 		} else if(line.startsWith("GETDIR: ")) {
 			if(!user.permissions.canDownloadFiles) {
 				client.sendPopupMessage("You do not have permission to download server files.");
 				return continueData;
 			}
 			String path = line.substring("GETDIR: ".length());
-			File file = getFileFromRelativePath(path);
+			File file = getFileFromRelativePath(client.ftConnection.rootFTDir, path);
 			if(!file.isDirectory()) {
 				client.ftConnection.println(PROTOCOL + " 48 FILE NOT A DIRECTORY");
 				return continueData;
@@ -684,7 +728,7 @@ public class RemoteAdmin {
 				client.ftConnection.println("FILE");
 				FileTransfer.sendFile(file, client.ftConnection.outStream, null);
 			}
-			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded contents of folder \"" + getPathRelativeToServerFolder(file) + "\";");
+			Main.appendLog("User FT: \"" + client.getDisplayName(true) + "\" downloaded contents of folder \"" + getPathRelativeTo(client.ftConnection.rootFTDir, file) + "\";");
 		} else if(line.startsWith("NOPOPUPDIALOGS: ")) {
 			client.showPopupDialogs = !line.substring("NOPOPUPDIALOGS: ".length()).equalsIgnoreCase("true");
 		} else {
