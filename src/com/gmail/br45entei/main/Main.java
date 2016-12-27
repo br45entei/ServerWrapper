@@ -3,6 +3,8 @@ package com.gmail.br45entei.main;
 import com.gmail.br45entei.data.DisposableByteArrayOutputStream;
 import com.gmail.br45entei.data.Property;
 import com.gmail.br45entei.data.RemoteClient;
+import com.gmail.br45entei.logging.ConsoleListener;
+import com.gmail.br45entei.logging.LogUtils;
 import com.gmail.br45entei.main.CredentialsManager.Credential;
 import com.gmail.br45entei.main.ScheduledRestartingOptionsDialog.TimeResult;
 import com.gmail.br45entei.process.ProcessIO;
@@ -94,133 +96,134 @@ public final class Main {
 		return headless || actHeadless;
 	}
 	
-	public static final Charset								stringCharset			= StandardCharsets.UTF_8;
+	public static final Charset								stringCharset					= StandardCharsets.UTF_8;
 	
 	protected static Thread									swtThread;
 	
 	public static volatile String							javaHome;
 	public static volatile String							javaExecutable;
-	public static volatile File								serverJar				= null;
+	public static volatile File								serverJar						= null;
 	
-	protected static volatile boolean						isRunning				= false;
+	protected static volatile boolean						isRunning						= false;
 	
 	/** The working directory of this application as determined by<br>
 	 * <code>System.getProperty("user.dir")</code> */
-	public static final File								rootDir					= new File(System.getProperty("user.dir"));
-	protected static final File								settingsFile			= new File(rootDir, "settings.txt");
+	public static final File								rootDir							= new File(System.getProperty("user.dir"));
+	protected static final File								settingsFile					= new File(rootDir, "settings.txt");
 	
 	//Console font settings ================
 	
-	protected static volatile String						consoleFontName			= "Consolas";
-	protected static volatile int							consoleFontSize			= 8;
-	protected static volatile boolean						consoleFontBold			= false;
-	protected static volatile boolean						consoleFontStrikeout	= false;
-	protected static volatile boolean						consoleFontUnderLined	= false;
-	protected static volatile boolean						consoleFontItalicized	= true;
+	protected static volatile String						consoleFontName					= "Consolas";
+	protected static volatile int							consoleFontSize					= 8;
+	protected static volatile boolean						consoleFontBold					= false;
+	protected static volatile boolean						consoleFontStrikeout			= false;
+	protected static volatile boolean						consoleFontUnderLined			= false;
+	protected static volatile boolean						consoleFontItalicized			= true;
 	
 	//General wrapper settings =============
 	
-	protected static volatile boolean						automaticServerStartup	= true;
-	protected static volatile boolean						automaticServerRestart	= false;
+	protected static volatile boolean						automaticServerStartup			= true;
+	protected static volatile boolean						automaticServerRestart			= false;
+	protected static volatile boolean						restartServerOnNonZeroExitCode	= false;
 	
-	protected static volatile boolean						alwaysShowTrayIcon		= false;
+	protected static volatile boolean						alwaysShowTrayIcon				= false;
 	
 	/** Whether or not server information such as icons and server names/motds
 	 * are sent to clients */
-	public static volatile boolean							sendServerInfoToClients	= true;
+	public static volatile boolean							sendServerInfoToClients			= true;
 	
 	//=============
 	
-	protected static final ArrayList<String>				logsToAppend			= new ArrayList<>();
+	protected static final ArrayList<String>				logsToAppend					= new ArrayList<>();
 	
-	protected static final HashMap<Integer, String>			inputtedCommands		= new HashMap<>();
-	protected static final Property<Integer>				selectedCommand			= new Property<>("Selected Command", Integer.valueOf(0));
-	protected static final DisposableByteArrayOutputStream	out						= new DisposableByteArrayOutputStream();
-	protected static final Property<String>					outTxt					= new Property<>("Console Text", "");
-	protected static final Thread							outTxtUpdateThread		= new Thread(new Runnable() {
-																						@Override
-																						public final void run() {
-																							int lastBufferSize = 0;
-																							while(true) {
-																								if(out.size() != lastBufferSize) {
-																									lastBufferSize = out.size();
-																									try {
-																										final String text;
-																										String t = out.toString();
-																										//Functions.sleep(15L);
-																										//String random = ((Object) "".toCharArray()).toString();
-																										//t = t.replace("\r>", "").replace("\r\n", random).replace("\r", "\n").replace("\n\n", "\n").replace(random, "\r\n").replace("\n\n", "\n");
-																										
-																										Functions.sleep(10L);
-																										final int maxLines = 10000;
-																										final int numOfLines = StringUtil.getNumOfLinesInStr(t);
-																										Functions.sleep(10L);
-																										if(numOfLines > maxLines) {
-																											final int numOfLinesToSkip = numOfLines - maxLines;
-																											int i = 0;
-																											String[] split = t.split(Pattern.quote("\n"));
-																											t = "";
-																											for(String s : split) {
-																												i++;
-																												if(i >= numOfLinesToSkip) {
-																													t += s + "\n";
-																												}
+	protected static final HashMap<Integer, String>			inputtedCommands				= new HashMap<>();
+	protected static final Property<Integer>				selectedCommand					= new Property<>("Selected Command", Integer.valueOf(0));
+	protected static final DisposableByteArrayOutputStream	out								= new DisposableByteArrayOutputStream();
+	protected static final Property<String>					outTxt							= new Property<>("Console Text", "");
+	protected static final Thread							outTxtUpdateThread				= new Thread(new Runnable() {
+																								@Override
+																								public final void run() {
+																									int lastBufferSize = 0;
+																									while(true) {
+																										if(out.size() != lastBufferSize) {
+																											lastBufferSize = out.size();
+																											try {
+																												final String text;
+																												String t = out.toString();
+																												//Functions.sleep(15L);
+																												//String random = ((Object) "".toCharArray()).toString();
+																												//t = t.replace("\r>", "").replace("\r\n", random).replace("\r", "\n").replace("\n\n", "\n").replace(random, "\r\n").replace("\n\n", "\n");
+																												
 																												Functions.sleep(10L);
+																												final int maxLines = 10000;
+																												final int numOfLines = StringUtil.getNumOfLinesInStr(t);
+																												Functions.sleep(10L);
+																												if(numOfLines > maxLines) {
+																													final int numOfLinesToSkip = numOfLines - maxLines;
+																													int i = 0;
+																													String[] split = t.split(Pattern.quote("\n"));
+																													t = "";
+																													for(String s : split) {
+																														i++;
+																														if(i >= numOfLinesToSkip) {
+																															t += s + "\n";
+																														}
+																														Functions.sleep(1L);
+																													}
+																												}
+																												text = t;																																	// + ">";
+																												outTxt.setValue(text);
+																											} catch(Throwable e) {
+																												e.printStackTrace();
 																											}
 																										}
-																										text = t;																																	// + ">";
-																										outTxt.setValue(text);
-																									} catch(Throwable e) {
-																										e.printStackTrace();
+																										Functions.sleep(5L);
 																									}
 																								}
-																								Functions.sleep(20L);
-																							}
-																						}
-																					}, "ConsoleWindow_UpdateThread");
-	protected static final DisposableByteArrayOutputStream	err						= new DisposableByteArrayOutputStream();
-	protected static final Property<String>					errTxt					= new Property<>("Console Text", "");
-	protected static final Thread							errTxtUpdateThread		= new Thread(new Runnable() {
-																						@Override
-																						public final void run() {
-																							int lastBufferSize = 0;
-																							while(true) {
-																								if(err.size() != lastBufferSize) {
-																									lastBufferSize = err.size();
-																									try {
-																										final String text;
-																										String t = err.toString();
-																										//Functions.sleep(15L);
-																										//String random = ((Object) "".toCharArray()).toString();
-																										//t = t.replace("\r>", "").replace("\r\n", random).replace("\r", "\n").replace("\n\n", "\n").replace(random, "\r\n").replace("\n\n", "\n");
-																										
-																										Functions.sleep(10L);
-																										final int maxLines = 10000;
-																										final int numOfLines = StringUtil.getNumOfLinesInStr(t);
-																										Functions.sleep(10L);
-																										if(numOfLines > maxLines) {
-																											final int numOfLinesToSkip = numOfLines - maxLines;
-																											int i = 0;
-																											String[] split = t.split(Pattern.quote("\n"));
-																											t = "";
-																											for(String s : split) {
-																												i++;
-																												if(i >= numOfLinesToSkip) {
-																													t += s + "\n";
-																												}
+																							}, "ConsoleWindow_UpdateThread");
+	protected static final DisposableByteArrayOutputStream	err								= new DisposableByteArrayOutputStream();
+	protected static final Property<String>					errTxt							= new Property<>("Console Text", "");
+	protected static final Thread							errTxtUpdateThread				= new Thread(new Runnable() {
+																								@Override
+																								public final void run() {
+																									int lastBufferSize = 0;
+																									while(true) {
+																										if(err.size() != lastBufferSize) {
+																											lastBufferSize = err.size();
+																											try {
+																												final String text;
+																												String t = err.toString();
+																												//Functions.sleep(15L);
+																												//String random = ((Object) "".toCharArray()).toString();
+																												//t = t.replace("\r>", "").replace("\r\n", random).replace("\r", "\n").replace("\n\n", "\n").replace(random, "\r\n").replace("\n\n", "\n");
+																												
 																												Functions.sleep(10L);
+																												final int maxLines = 10000;
+																												final int numOfLines = StringUtil.getNumOfLinesInStr(t);
+																												Functions.sleep(10L);
+																												if(numOfLines > maxLines) {
+																													final int numOfLinesToSkip = numOfLines - maxLines;
+																													int i = 0;
+																													String[] split = t.split(Pattern.quote("\n"));
+																													t = "";
+																													for(String s : split) {
+																														i++;
+																														if(i >= numOfLinesToSkip) {
+																															t += s + "\n";
+																														}
+																														Functions.sleep(1L);
+																													}
+																												}
+																												text = t;																																	// + ">";
+																												errTxt.setValue(text);
+																											} catch(Throwable e) {
+																												e.printStackTrace();
 																											}
 																										}
-																										text = t;																																	// + ">";
-																										errTxt.setValue(text);
-																									} catch(Throwable e) {
-																										e.printStackTrace();
+																										Functions.sleep(5L);
 																									}
 																								}
-																								Functions.sleep(20L);
-																							}
-																						}
-																					}, "ConsoleWindow_Err_UpdateThread");
+																							}, "ConsoleWindow_Err_UpdateThread");
 	
 	public static final String getConsoleLogs() {
 		return outTxt.getValue();
@@ -247,12 +250,17 @@ public final class Main {
 	
 	protected static volatile boolean							isProcessBeingStarted		= false;
 	
+	protected static volatile String							currentProcessServerName	= "SERVER";
+	
 	protected static volatile boolean							scheduledRestartInEffect	= false;
 	
 	protected static volatile boolean							serverStoppedByUser			= false;
+	protected static volatile boolean							serverCrashed				= false;
+	protected static volatile int								lastServerExitCode			= 0;
 	
 	private static volatile String								serverState;
 	protected static volatile boolean							aboutDialogIsOpen			= false;
+	protected static volatile AboutDialog						aboutDialog					= null;
 	
 	protected static Display									display;
 	protected static Shell										shell;
@@ -265,6 +273,7 @@ public final class Main {
 	protected static MenuItem									mntmStartServerAutomatically;
 	protected static MenuItem									mntmTrayIconAlways;
 	protected static MenuItem									mntmRestartServerAutomatically;
+	protected static MenuItem									mntmRestartServerEven;
 	protected static MenuItem									mntmSendServerInfo;
 	protected static MenuItem									mntmCheckForUpdates;
 	protected static MenuItem									mntmOpenServerFolder;
@@ -341,6 +350,7 @@ public final class Main {
 		Main.startHiddenInTray = StringUtil.containsIgnoreCase(sysArgs.arguments, "trayOnly") || StringUtil.containsIgnoreCase(sysArgs.arguments, "silent") || StringUtil.containsIgnoreCase(sysArgs.arguments, "hidden");
 		Main.actHeadless = StringUtil.containsIgnoreCase(sysArgs.arguments, "-headless") || StringUtil.containsIgnoreCase(sysArgs.arguments, "headless");
 		Main.swtThread = Thread.currentThread();
+		ConsoleListener.setupConsole();
 		
 		Main.display = Display.getDefault();
 		shell = new Shell(Main.display, SWT.SHELL_TRIM | SWT.APPLICATION_MODAL);
@@ -439,9 +449,15 @@ public final class Main {
 			Main.isRunning = false;//un-kek
 		}
 		Main.saveSettings();
-		Main.display.dispose();
 		for(Credential user : savedCredentials) {
 			user.saveToFile();
+		}
+		try {
+			Main.display.dispose();
+			ConsoleListener.stopConsole();
+			ConsoleListener.waitForConsoleToStop();
+		} catch(NoClassDefFoundError e) {
+			e.printStackTrace();
 		}
 		System.exit(0);
 	}
@@ -525,9 +541,12 @@ public final class Main {
 						} else if(motd != null && !motd.isEmpty()) {
 							text = motd;
 						}
+						currentProcessServerName = text;
 					}
 				}
 			}
+		} else {
+			currentProcessServerName = "SERVER";
 		}
 		if(!defaultTitle.equals(text)) {
 			text = text.trim().replace("&", "&&").replaceAll(Pattern.quote("\r"), "").replaceAll(Pattern.quote("\n"), " ").trim();
@@ -588,6 +607,14 @@ public final class Main {
 		}
 	}
 	
+	public static final boolean isServerStarting() {
+		return Main.startServer;
+	}
+	
+	public static final boolean isServerStopping() {
+		return Main.stoppingServer;
+	}
+	
 	public static final void launchServer(RemoteClient from) {
 		if(Main.isProcessAlive() || !Main.isServerJarSelected()) {
 			Main.startServer = false;//Prevents potential loops/stackoverflows
@@ -608,6 +635,7 @@ public final class Main {
 			Main.serverStoppedByUser = false;
 			Main.hasProcessDied = false;
 			Main.processExitCode = 0;
+			ConsoleListener.getConsole().archiveLog(true);
 			Main.out.dispose();
 			Main.err.dispose();
 			//RemoteClient.resetClientLogs();
@@ -620,6 +648,7 @@ public final class Main {
 			final Runnable[] runnables = new Runnable[] {new Runnable() {
 				@Override
 				public final void run() {
+					Thread.currentThread().setName("STDOUT_Thread");
 					final ProcessIO THIS = process;
 					//byte[] buf = new byte[4096];
 					//int read;
@@ -645,6 +674,7 @@ public final class Main {
 			}, new Runnable() {
 				@Override
 				public final void run() {
+					Thread.currentThread().setName("STDERR_Thread");
 					final ProcessIO THIS = process;
 					//byte[] buf = new byte[4096];
 					//int read;
@@ -709,6 +739,8 @@ public final class Main {
 			}
 			Main.updateShellAppearance();
 			if(threads.length == 2) {
+				scheduledRestartData.lastRestartTime = System.currentTimeMillis();
+				scheduledRestartData.readyToIssueCmdsBeforeRestart = true;
 				Main.appendLog("Server told to start successfully.");
 			} else {
 				Main.appendLog("Failed to start server: Unable to verify server process started successfully!");
@@ -720,7 +752,11 @@ public final class Main {
 			if(e.getMessage() != null && e.getMessage().startsWith("Failed to retrieve RMIServer stub: ")) {
 				e.printStackTrace();
 				if(Main.javaExecutable.replace("\\", "/").contains("/jdk")) {
-					new JDKWarningDialog(Main.shell).open();
+					Response result = new JDKWarningDialog(Main.shell).open();
+					if(result == Response.NO_RESPONSE) {
+						appendLog("==You appear to be using a Java Development Kit(JDK) instead of a Java Runtime Environment(JRE) to start the server. Since the server may not start correctly, it is recommended that you switch to a JRE, such as jre1.8.0_25.");
+						System.out.println("You appear to be using a Java Development Kit(JDK) instead of a Java Runtime Environment(JRE) to start the server. Since the server may not start correctly, it is recommended that you switch to a JRE, such as jre1.8.0_25.");
+					}
 				}
 			}
 		}
@@ -757,6 +793,14 @@ public final class Main {
 	
 	protected static final String			noConnText				= "There are no connected clients at this time.";
 	protected static final String			remAdminDisabled		= "Remote Administration is disabled. To allow clients to connect, please click the \"Enable\" button above.";
+	
+	protected static final void resetVersion2Scheduling() {
+		scheduledRestartData.useVersion1 = true;
+		scheduledRestartData.v2Hour = 12;
+		scheduledRestartData.v2Minute = 0;
+		scheduledRestartData.v2Second = 0;
+		enableScheduledRestarts = false;
+	}
 	
 	public static final void stopServer(RemoteClient from, boolean rightNow) {
 		if(Main.stoppingServer && !rightNow) {
@@ -871,6 +915,19 @@ public final class Main {
 	}
 	
 	private static final void onServerShutdown(RemoteClient from) {
+		if(serverCrashed) {
+			appendLog("Uh oh! The server appears to have crashed.");
+			appendLog("It termiated with the following error code: " + lastServerExitCode);
+			if(Main.automaticServerRestart) {
+				if(!restartServerOnNonZeroExitCode) {
+					appendLog("Aborting automatic restart due to crash.");
+					return;
+				}
+				appendLog("The server will be restarted again shortly.");
+			} else {
+				return;
+			}
+		}
 		if(!Main.hasProcessDied || !Main.automaticServerRestart) {
 			return;
 		}
@@ -884,6 +941,7 @@ public final class Main {
 	
 	public static final void addLogToConsole(String log) {
 		RemoteClient.sendLogToClients(log);
+		LogUtils.info("[" + currentProcessServerName + "] " + log);
 		byte[] data = (log + "\r\n").getBytes(stringCharset);
 		Main.out.write(data, 0, data.length);
 	}
@@ -964,13 +1022,24 @@ public final class Main {
 		try(BufferedReader br = new BufferedReader(new FileReader(settingsFile))) {
 			while(br.ready()) {
 				String line = br.readLine();
-				if(line.startsWith("#")) {
+				if(line == null) {
+					break;
+				}
+				if(line.startsWith("#") || line.trim().isEmpty()) {
 					continue;
 				}
 				String[] split = line.trim().split(Pattern.quote("="));
 				if(split.length == 2) {
 					String pname = split[0].trim();
 					String value = split[1].trim();
+					final boolean bval = Boolean.valueOf(value).booleanValue();
+					final int intVal;
+					final boolean isInt = StringUtil.isStrInt(value);
+					if(isInt) {
+						intVal = Integer.valueOf(value).intValue();
+					} else {
+						intVal = -1;
+					}
 					if(pname.equalsIgnoreCase("fontName")) {
 						Main.consoleFontName = value;
 					} else if(pname.equalsIgnoreCase("fontSize")) {
@@ -978,19 +1047,21 @@ public final class Main {
 							Main.consoleFontSize = Long.valueOf(value).intValue();
 						}
 					} else if(pname.equalsIgnoreCase("fontBold")) {
-						Main.consoleFontBold = Boolean.valueOf(value).booleanValue();
+						Main.consoleFontBold = bval;
 					} else if(pname.equalsIgnoreCase("fontItalicized")) {
-						Main.consoleFontItalicized = Boolean.valueOf(value).booleanValue();
+						Main.consoleFontItalicized = bval;
 					} else if(pname.equalsIgnoreCase("fontStrikeout")) {
-						Main.consoleFontStrikeout = Boolean.valueOf(value).booleanValue();
+						Main.consoleFontStrikeout = bval;
 					} else if(pname.equalsIgnoreCase("fontUnderlined")) {
-						Main.consoleFontUnderLined = Boolean.valueOf(value).booleanValue();
+						Main.consoleFontUnderLined = bval;
 					} else if(pname.equalsIgnoreCase("automaticServerStartup")) {
-						Main.automaticServerStartup = Boolean.valueOf(value).booleanValue();
+						Main.automaticServerStartup = bval;
 					} else if(pname.equalsIgnoreCase("automaticServerRestart")) {
-						Main.automaticServerRestart = Boolean.valueOf(value).booleanValue();
+						Main.automaticServerRestart = bval;
+					} else if(pname.equalsIgnoreCase("restartServerOnNonZeroExitCode")) {
+						Main.restartServerOnNonZeroExitCode = bval;
 					} else if(pname.equalsIgnoreCase("alwaysShowTrayIcon")) {
-						Main.alwaysShowTrayIcon = Boolean.valueOf(value).booleanValue();
+						Main.alwaysShowTrayIcon = bval;
 					} else if(pname.equalsIgnoreCase("serverJar")) {
 						File oldServerJar = serverJar;
 						Main.serverJar = new File(value);
@@ -1000,7 +1071,7 @@ public final class Main {
 					} else if(pname.equalsIgnoreCase("vmArgs")) {
 						Main.txtVmArgs.setText(value);
 					} else if(pname.equalsIgnoreCase("useG1GC")) {
-						Main.btnUseG1GC.setSelection(Boolean.valueOf(value).booleanValue());
+						Main.btnUseG1GC.setSelection(bval);
 						Main.useG1GC = Main.btnUseG1GC.getSelection();
 					} else if(pname.equalsIgnoreCase("progArgs")) {
 						Main.txtProgramArgs.setText(value);
@@ -1015,116 +1086,20 @@ public final class Main {
 							Main.javaExecutable = value;
 						}
 					} else if(pname.equalsIgnoreCase("remAdminListenPort")) {
-						if(StringUtil.isStrLong(value)) {
-							int port = Long.valueOf(value).intValue();
+						if(isInt) {
+							int port = intVal;
 							if(port >= 0 && port < 65535) {
 								RemoteAdmin.listenPort = port;
 							}
 						}
 					} else if(pname.equalsIgnoreCase("enableScheduledRestarts")) {
-						Main.enableScheduledRestarts = Boolean.valueOf(value).booleanValue();
+						Main.enableScheduledRestarts = bval;
 					} else if(pname.equalsIgnoreCase("restartCommands")) {
 						Main.restartCommands = value.replace("<newline>", "\r\n");
 					} else if(pname.equalsIgnoreCase("enableRemoteAdministration")) {
-						RemoteAdmin.enableRemoteAdministration = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("monday")) {
-						Main.scheduledRestartData.monday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("tuesday")) {
-						Main.scheduledRestartData.tuesday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("wednesday")) {
-						Main.scheduledRestartData.wednesday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("thursday")) {
-						Main.scheduledRestartData.thursday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("friday")) {
-						Main.scheduledRestartData.friday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("saturday")) {
-						Main.scheduledRestartData.saturday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("sunday")) {
-						Main.scheduledRestartData.sunday = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable1")) {
-						Main.scheduledRestartData.enable1 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable2")) {
-						Main.scheduledRestartData.enable2 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable3")) {
-						Main.scheduledRestartData.enable3 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable4")) {
-						Main.scheduledRestartData.enable4 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable5")) {
-						Main.scheduledRestartData.enable5 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("enable6")) {
-						Main.scheduledRestartData.enable6 = Boolean.valueOf(value).booleanValue();
-					} else if(pname.equalsIgnoreCase("hour1")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour1 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("hour2")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour2 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("hour3")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour3 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("hour4")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour4 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("hour5")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour5 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("hour6")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.hour6 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute1")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute1 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute2")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute2 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute3")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute3 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute4")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute4 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute5")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute5 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("minute6")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.minute6 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second1")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second1 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second2")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second2 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second3")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second3 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second4")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second4 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second5")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second5 = Integer.valueOf(value).intValue();
-						}
-					} else if(pname.equalsIgnoreCase("second6")) {
-						if(StringUtil.isStrInt(value)) {
-							Main.scheduledRestartData.second6 = Integer.valueOf(value).intValue();
-						}
+						RemoteAdmin.enableRemoteAdministration = bval;
+					} else {
+						scheduledRestartData.loadFromConfig(pname, bval, intVal, isInt);
 					}
 				}
 			}
@@ -1149,6 +1124,7 @@ public final class Main {
 			pr.println("# Minecraft server configuration:");
 			pr.println("automaticServerStartup=" + Main.automaticServerStartup);
 			pr.println("automaticServerRestart=" + Main.automaticServerRestart);
+			pr.println("restartServerOnNonZeroExitCode=" + Main.restartServerOnNonZeroExitCode);
 			pr.println("alwaysShowTrayIcon=" + Main.alwaysShowTrayIcon);
 			final String sJarPath = Main.serverJar.getAbsolutePath();//The following extra code allows for saving a relative file path if the user moves their server files around a lot(e.g. removable drive, rename a parent folder, etc.)
 			int indexOfDot = sJarPath.indexOf(".\\") == -1 ? sJarPath.indexOf("./") : sJarPath.indexOf(".\\");
@@ -1166,6 +1142,7 @@ public final class Main {
 			pr.println("# Scheduled restart settings:");
 			pr.println("enableScheduledRestarts=" + Main.enableScheduledRestarts);
 			pr.println("restartCommands=" + Main.restartCommands.replace("\r\n", "<newline>"));
+			pr.println("");
 			pr.println(Main.scheduledRestartData.toString());
 			pr.println();
 			return true;
@@ -1178,6 +1155,8 @@ public final class Main {
 		boolean sendToClients = !str.startsWith("==");
 		if(!sendToClients) {
 			str = str.substring(2);
+		} else {
+			LogUtils.info(str);
 		}
 		try {
 			if(!Main.wrapperLog.isDisposed()) {
@@ -1632,10 +1611,22 @@ public final class Main {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
 				Main.automaticServerRestart = mntmRestartServerAutomatically.getSelection();
+				Main.mntmRestartServerEven.setEnabled(Main.automaticServerRestart);
 			}
 		});
 		mntmRestartServerAutomatically.setSelection(Main.automaticServerRestart);
 		mntmRestartServerAutomatically.setText("Restart server automatically upon server exit");
+		
+		mntmRestartServerEven = new MenuItem(menu_2, SWT.CHECK);
+		mntmRestartServerEven.addSelectionListener(new SelectionAdapter() {
+			@Override
+			public void widgetSelected(SelectionEvent e) {
+				Main.restartServerOnNonZeroExitCode = mntmRestartServerEven.getSelection();
+			}
+		});
+		mntmRestartServerEven.setText("Restart server even if exit code != 0");
+		mntmRestartServerEven.setEnabled(Main.automaticServerRestart);
+		mntmRestartServerEven.setSelection(Main.restartServerOnNonZeroExitCode);
 		
 		mntmStartServerAutomatically = new MenuItem(menu_2, SWT.CHECK);
 		mntmStartServerAutomatically.addSelectionListener(new SelectionAdapter() {
@@ -1667,8 +1658,19 @@ public final class Main {
 				Response result = dialog.open();
 				if(result == Response.DONE) {
 					scheduledRestartData = newData;
+					if(!scheduledRestartData.useVersion1) {
+						if(scheduledRestartData.v2Hour == 0 && scheduledRestartData.v2Minute == 0) {
+							resetVersion2Scheduling();
+							new PopupDialog(shell, "Invalid scheduled restarting time", "The alternate scheduling hour and minute values were set too low, and have been disabled to prevent high resource usage(must have at least one minute between restarts).").open();
+						}
+					}
 					restartCommands = dialog.commandsToRun;
 					saveSettings();
+					if(needToRestartProcess()) {
+						scheduledRestartData.lastRestartTime = System.currentTimeMillis();
+						scheduledRestartData.readyToIssueCmdsBeforeRestart = true;
+						new PopupDialog(shell, "Smaller restart time", "The new calculated time remaining is small enough that it would have caused a restart just now, so the restart time was extended using the data you entered.").open();
+					}
 				}
 			}
 		});
@@ -1725,7 +1727,9 @@ public final class Main {
 			public void widgetSelected(SelectionEvent e) {
 				if(!aboutDialogIsOpen) {
 					aboutDialogIsOpen = true;
-					new AboutDialog(shell).open();
+					aboutDialog = new AboutDialog(shell);
+					aboutDialog.open();
+					aboutDialog = null;
 					aboutDialogIsOpen = false;
 				}
 			}
@@ -1988,11 +1992,27 @@ public final class Main {
 		}
 	}
 	
-	public static final void shutdown() {
+	public static final boolean shutdown(boolean force) {
+		if(force) {
+			if(aboutDialogIsOpen) {
+				aboutDialog.close();
+				while(aboutDialogIsOpen) {
+					if(checkThreadAccess()) {
+						mainLoop();
+					}
+					Functions.sleep(10L);
+				}
+			}
+		}
+		return shutdown();
+	}
+	
+	public static final boolean shutdown() {
 		if(aboutDialogIsOpen) {
-			return;
+			return false;
 		}
 		isRunning = false;
+		return true;
 	}
 	
 	/** @return True if the current thread is the SWT main thread */
@@ -2095,20 +2115,42 @@ public final class Main {
 	}
 	
 	private static final boolean doesTimeMatchSchedule() {
-		Calendar c = Calendar.getInstance();
-		c.setTime(new Date(System.currentTimeMillis()));
-		final int hour = c.get(Calendar.HOUR_OF_DAY);
-		final int minute = c.get(Calendar.MINUTE);
-		final int second = c.get(Calendar.SECOND);
-		return (scheduledRestartData.enable1 && scheduledRestartData.hour1 == hour && scheduledRestartData.minute1 == minute && scheduledRestartData.second1 == second) || //
-				(scheduledRestartData.enable2 && scheduledRestartData.hour2 == hour && scheduledRestartData.minute2 == minute && scheduledRestartData.second2 == second) || //
-				(scheduledRestartData.enable3 && scheduledRestartData.hour3 == hour && scheduledRestartData.minute3 == minute && scheduledRestartData.second3 == second) || //
-				(scheduledRestartData.enable4 && scheduledRestartData.hour4 == hour && scheduledRestartData.minute4 == minute && scheduledRestartData.second4 == second) || //
-				(scheduledRestartData.enable5 && scheduledRestartData.hour5 == hour && scheduledRestartData.minute5 == minute && scheduledRestartData.second5 == second) || //
-				(scheduledRestartData.enable6 && scheduledRestartData.hour6 == hour && scheduledRestartData.minute6 == minute && scheduledRestartData.second6 == second);
+		return doesTimeMatchSchedule(System.currentTimeMillis());
 	}
 	
-	private static final boolean needToRestartProcess() {
+	private static final boolean doesTimeMatchSchedule(long now) {
+		if(!scheduledRestartData.useVersion1) {
+			if(scheduledRestartData.v2Hour == 0 && scheduledRestartData.v2Minute == 0) {
+				resetVersion2Scheduling();
+				new PopupDialog(shell, "Invalid scheduled restarting time", "The alternate scheduling hour and minute values were set too low, and have been disabled to prevent high resource usage(must have at least one minute between restarts).").open();
+			}
+		}
+		if(scheduledRestartData.useVersion1) {
+			Calendar c = Calendar.getInstance();
+			c.setTimeInMillis(now);
+			final int hour = c.get(Calendar.HOUR_OF_DAY);
+			final int minute = c.get(Calendar.MINUTE);
+			final int second = c.get(Calendar.SECOND);
+			return (scheduledRestartData.enable1 && scheduledRestartData.hour1 == hour && scheduledRestartData.minute1 == minute && scheduledRestartData.second1 == second) || //
+					(scheduledRestartData.enable2 && scheduledRestartData.hour2 == hour && scheduledRestartData.minute2 == minute && scheduledRestartData.second2 == second) || //
+					(scheduledRestartData.enable3 && scheduledRestartData.hour3 == hour && scheduledRestartData.minute3 == minute && scheduledRestartData.second3 == second) || //
+					(scheduledRestartData.enable4 && scheduledRestartData.hour4 == hour && scheduledRestartData.minute4 == minute && scheduledRestartData.second4 == second) || //
+					(scheduledRestartData.enable5 && scheduledRestartData.hour5 == hour && scheduledRestartData.minute5 == minute && scheduledRestartData.second5 == second) || //
+					(scheduledRestartData.enable6 && scheduledRestartData.hour6 == hour && scheduledRestartData.minute6 == minute && scheduledRestartData.second6 == second);
+		}
+		long lastTimeRestarted = scheduledRestartData.lastRestartTime;
+		long hours = scheduledRestartData.v2Hour * 3600000L;
+		long minutes = scheduledRestartData.v2Minute * 60000L;
+		long seconds = scheduledRestartData.v2Second * 1000L;
+		long nextRestartTime = lastTimeRestarted + hours + minutes + seconds;
+		return now >= nextRestartTime;
+	}
+	
+	private static final boolean needToIssueServerRestartCmdsBeforeScheduledRestart() {
+		return scheduledRestartData.readyToIssueCmdsBeforeRestart && enableScheduledRestarts && (doesCalendarDayMatchSchedule() && doesTimeMatchSchedule(System.currentTimeMillis() + scheduledRestartData.executeCmdsTimeBeforeRestartInMillis) && !isProcessBeingStarted);
+	}
+	
+	protected static final boolean needToRestartProcess() {
 		return enableScheduledRestarts && (doesCalendarDayMatchSchedule() && doesTimeMatchSchedule() && !isProcessBeingStarted);
 	}
 	
@@ -2213,6 +2255,10 @@ public final class Main {
 		mntmSelectJavaExecutable.setEnabled(!processIsAlive);
 		mntmStartServerAutomatically.setSelection(Main.automaticServerStartup);
 		mntmRestartServerAutomatically.setSelection(Main.automaticServerRestart);
+		mntmRestartServerEven.setSelection(restartServerOnNonZeroExitCode);
+		if(mntmRestartServerEven.getEnabled() != Main.automaticServerRestart) {
+			mntmRestartServerEven.setEnabled(Main.automaticServerRestart);
+		}
 		mntmEnableScheduledRestarts.setSelection(Main.enableScheduledRestarts);
 		mntmSendServerInfo.setSelection(Main.sendServerInfoToClients);
 		mntmOpenServerFolder.setEnabled(serverJarExists);
@@ -2285,7 +2331,9 @@ public final class Main {
 			if(!process.process.isAlive()) {
 				processExitCode = process.process.exitValue();
 				hasProcessDied = true;
-				appendLog("Process terminated with error code: " + process.process.exitValue());
+				lastServerExitCode = process.process.exitValue();
+				appendLog("Process terminated with error code: " + lastServerExitCode);
+				serverCrashed = lastServerExitCode != 0;
 				RemoteClient from = process.stopServerClient;
 				process.stopServerClient = null;
 				process = null;
@@ -2300,29 +2348,47 @@ public final class Main {
 				appendLog(str);
 			}
 		}
+		if(needToIssueServerRestartCmdsBeforeScheduledRestart()) {
+			if(isProcessAlive()) {
+				String[] split = restartCommands.split(Pattern.quote("\n"));
+				for(String cmd : split) {
+					cmd = cmd.trim();
+					if(cmd.isEmpty()) {
+						continue;
+					}
+					Main.handleInput(null, cmd);
+				}
+			}
+			scheduledRestartData.readyToIssueCmdsBeforeRestart = false;
+		}
 		if(needToRestartProcess()) {
+			if(!isProcessAlive() && serverStoppedByUser) {
+				appendLog("It's time to restart the server, but the server was recently");
+				appendLog("stopped by a user, so the scheduled restart will not occur.");
+				scheduledRestartData.lastRestartTime = System.currentTimeMillis();
+				scheduledRestartInEffect = false;
+				return;
+			}
 			if(!scheduledRestartInEffect) {
+				scheduledRestartData.lastRestartTime = System.currentTimeMillis();
 				appendLog("Performing scheduled restart...");
 				scheduledRestartInEffect = true;
 				if(!isProcessAlive()) {
 					startServer = true;
 				} else {
-					String[] split = restartCommands.split(Pattern.quote("\n"));
-					for(String cmd : split) {
-						cmd = cmd.trim();
-						if(cmd.isEmpty()) {
-							continue;
+					if(scheduledRestartData.useVersion1) {
+						final long startTime = System.currentTimeMillis();
+						final long endTime = startTime + 10000L;
+						while(System.currentTimeMillis() <= endTime) {
+							Main.mainLoop();
 						}
-						Main.handleInput(null, cmd);
-					}
-					final long startTime = System.currentTimeMillis();
-					final long endTime = startTime + 10000L;
-					while(System.currentTimeMillis() <= endTime) {
-						Main.mainLoop();
 					}
 					stopServer(null, false);
 					startServer = true;
 					appendLog("Restart complete.");
+					if(!scheduledRestartData.useVersion1) {
+						appendLog("The server will continue to reset every " + scheduledRestartData.getVersion2Frequency() + ".");
+					}
 				}
 			}
 		} else {

@@ -53,25 +53,27 @@ public final class PopupDialog extends Dialog {
 	 * 
 	 * @return the result */
 	public Response open() {
-		this.shell.open();
-		this.shell.layout();
-		Display display = getParent().getDisplay();
-		while(!this.shell.isDisposed()) {
-			if(runFromMain) {
-				Main.mainLoop();
-				this.updateUI();
-			} else {
-				if(!display.readAndDispatch()) {
-					this.shell.update();
-					Functions.sleep(10);//display.sleep();
+		if(!Main.isHeadless()) {
+			this.shell.open();
+			this.shell.layout();
+			Display display = getParent().getDisplay();
+			while(!this.shell.isDisposed()) {
+				if(runFromMain) {
+					Main.mainLoop();
+					this.updateUI();
+				} else {
+					if(!display.readAndDispatch()) {
+						this.shell.update();
+						Functions.sleep(10);//display.sleep();
+					}
+				}
+				if(this.result != Response.NO_RESPONSE) {
+					break;
 				}
 			}
-			if(this.result != Response.NO_RESPONSE) {
-				break;
+			if(!this.shell.isDisposed()) {
+				this.shell.dispose();
 			}
-		}
-		if(!this.shell.isDisposed()) {
-			this.shell.dispose();
 		}
 		return this.result;
 	}

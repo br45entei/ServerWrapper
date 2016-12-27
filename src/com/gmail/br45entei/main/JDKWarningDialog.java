@@ -34,7 +34,7 @@ public class JDKWarningDialog extends Dialog {
 	/** Open the dialog.
 	 * 
 	 * @return the result */
-	public Object open() {
+	public Response open() {
 		createContents();
 		if(!Main.isHeadless()) {
 			this.shell.open();

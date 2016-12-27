@@ -34,9 +34,8 @@ public class FeatureNotImplementedDialog extends Dialog {
 	/** Open the dialog.
 	 * 
 	 * @return the result */
-	public Object open(String msg) {
+	public Response open(String msg) {
 		createContents(msg);
-		Functions.centerShell2OnShell1(getParent(), this.shell);
 		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();
@@ -89,5 +88,7 @@ public class FeatureNotImplementedDialog extends Dialog {
 		lblImage.setImage(SWTResourceManager.getImage(FeatureNotImplementedDialog.class, "/assets/textures/icons/warning.ico"));
 		lblImage.setBounds(10, 10, 48, 48);
 		
+		Functions.centerShell2OnShell1(getParent(), this.shell);
 	}
+	
 }

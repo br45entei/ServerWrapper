@@ -1,5 +1,6 @@
 package com.gmail.br45entei.data;
 
+import com.gmail.br45entei.logging.LogUtils;
 import com.gmail.br45entei.main.CredentialsManager.UserPermissions;
 import com.gmail.br45entei.main.Main;
 import com.gmail.br45entei.main.RemoteAdmin;
@@ -97,6 +98,10 @@ public final class RemoteClient implements Closeable {
 	public volatile boolean								showPopupDialogs		= true;
 	
 	public static final RemoteClient					consoleClient			= new RemoteClient();
+	
+	static {
+		consoleClient.username = "CONSOLE";
+	}
 	
 	//==========================================
 	
@@ -373,7 +378,7 @@ public final class RemoteClient implements Closeable {
 	}
 	
 	public final String getIpAddress() {
-		return StringUtils.replaceOnce(this.socket.getRemoteSocketAddress().toString(), "/", "");
+		return this == consoleClient ? "127.0.0.1" : StringUtils.replaceOnce(this.socket.getRemoteSocketAddress().toString(), "/", "");
 	}
 	
 	public final String getNickName() {
@@ -488,6 +493,16 @@ public final class RemoteClient implements Closeable {
 	
 	/** @param cmd The command to send */
 	public final void println(String cmd) {
+		if(this == consoleClient) {
+			if(cmd != null) {
+				if(cmd.startsWith("WARN: ")) {
+					LogUtils.warn(cmd.substring("WARN: ".length()));
+					return;
+				}
+				LogUtils.info(cmd.startsWith("LOG: ") ? cmd.substring("LOG: ".length()) : cmd);
+				return;
+			}
+		}
 		if(cmd != null) {
 			if(!this.hasLogSenderBeenStarted) {
 				this.out.print(cmd + "\r\n");

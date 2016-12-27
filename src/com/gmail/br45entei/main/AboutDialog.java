@@ -74,4 +74,9 @@ public class AboutDialog extends Dialog {
 		
 	}
 	
+	/** Tells this dialog that it needs to close. */
+	public final void close() {
+		this.result = Response.CLOSE;
+	}
+	
 }

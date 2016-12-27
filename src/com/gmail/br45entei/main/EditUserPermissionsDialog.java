@@ -46,13 +46,13 @@ public class EditUserPermissionsDialog extends Dialog {
 		super(parent, SWT.CLOSE | SWT.TITLE | SWT.PRIMARY_MODAL);
 		this.setText("SWT Dialog");
 		this.permissions = permissions;
-		this.createContents();
 	}
 	
 	/** Open the dialog.
 	 * 
 	 * @return the result */
 	public Response open() {
+		this.createContents();
 		if(!Main.isHeadless()) {
 			this.shell.open();
 			this.shell.layout();

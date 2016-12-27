@@ -124,7 +124,7 @@ public class UpdateChecker {
 					PrintWriter pr = new PrintWriter(new OutputStreamWriter(server.getOutputStream(), StandardCharsets.UTF_8), true);
 					final String request = "HEAD " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis());
 					System.out.println("\r\nRequest:\r\n" + request + "\r\n\r\nResponse:");
-					pr.println(request);
+					pr.println(request + "\n");
 					pr.flush();
 					if(dialog != null) {
 						dialog.progress.setValue(Double.valueOf(10));
@@ -222,7 +222,7 @@ public class UpdateChecker {
 					PrintWriter pr = new PrintWriter(new OutputStreamWriter(server.getOutputStream(), StandardCharsets.UTF_8), true);
 					final String request = "GET " + getDownloadPath() + " HTTP/1.1\nhost: " + getDownloadIP() + "\nUser-Agent: " + getJarFileName() + " (" + RemoteAdmin.PROTOCOL + ") Java/" + Runtime.class.getPackage().getImplementationVersion() + "\nIf-Modified-Since: " + StringUtil.getCacheTime(time.toMillis());
 					System.out.println("\r\nRequest:\r\n" + request + "\r\n\r\nResponse:");
-					pr.println(request);
+					pr.println(request + "\n");
 					pr.flush();
 					InputStream in = server.getInputStream();
 					String responseCode = null;
